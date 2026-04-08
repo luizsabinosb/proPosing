@@ -18,6 +18,10 @@ NC='\033[0m'
 
 cd "$PROJECT_DIR"
 
+check_backend_health() {
+    curl -s http://localhost:8000/health > /dev/null 2>&1
+}
+
 if ! curl -s http://localhost:8000/health > /dev/null 2>&1; then
     echo -e "${YELLOW}⚠️  Backend não está rodando. Iniciando...${NC}"
     cd "$BACKEND_DIR"
@@ -25,11 +29,18 @@ if ! curl -s http://localhost:8000/health > /dev/null 2>&1; then
     nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > "$PROJECT_DIR/.backend.log" 2>&1 &
     echo $! > "$BACKEND_PID_FILE"
     echo -e "${GREEN}   Backend iniciado (PID: $(cat "$BACKEND_PID_FILE"))${NC}"
-    sleep 3
+    echo -e "${BLUE}   Aguardando backend responder...${NC}"
+    for i in {1..30}; do
+        if check_backend_health; then
+            echo -e "${GREEN}   ✅ Backend respondeu em ${i}s${NC}"
+            break
+        fi
+        sleep 1
+    done
     cd "$PROJECT_DIR"
 fi
 
-if ! curl -s http://localhost:8000/health > /dev/null 2>&1; then
+if ! check_backend_health; then
     echo -e "${RED}❌ Backend não respondeu. Verifique: cat .backend.log${NC}"
     exit 1
 fi

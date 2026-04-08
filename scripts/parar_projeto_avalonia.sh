@@ -1,6 +1,5 @@
 #!/bin/bash
-# Script para parar todos os processos do ProPosing
-# Funciona com rodar_macos.sh (Avalonia), rodar_web.sh e iniciar_backend.sh
+# Script para parar backend + interface Avalonia do ProPosing
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -9,9 +8,9 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-cd "$PROJECT_DIR"
+cd "$PROJECT_DIR" || exit 1
 
-echo -e "${YELLOW}🛑 Parando ProPosing...${NC}"
+echo -e "${YELLOW}🛑 Parando ProPosing (Avalonia)...${NC}"
 
 for PID_FILE in .backend.pid .backend_macos_pid; do
   if [ -f "$PID_FILE" ]; then
@@ -32,21 +31,17 @@ if [ -f ".avalonia_macos_pid" ]; then
   if ps -p "$AVALONIA_PID" > /dev/null 2>&1; then
     echo -e "${YELLOW}   Parando Avalonia (PID: $AVALONIA_PID)...${NC}"
     kill "$AVALONIA_PID" 2>/dev/null || true
+    sleep 1
+    ps -p "$AVALONIA_PID" > /dev/null 2>&1 && kill -9 "$AVALONIA_PID" 2>/dev/null || true
     echo -e "${GREEN}   ✅ Avalonia parada${NC}"
   fi
   rm -f ".avalonia_macos_pid"
 fi
 
-if lsof -ti:8000 > /dev/null 2>&1; then
-    echo -e "${YELLOW}   Parando processo na porta 8000...${NC}"
-    lsof -ti:8000 | xargs kill -9 2>/dev/null || true
-    echo -e "${GREEN}   ✅ Porta 8000 liberada${NC}"
-fi
-
 if pgrep -f "ProPosing.Avalonia" > /dev/null; then
-    echo -e "${YELLOW}   Parando Avalonia...${NC}"
-    pkill -f "ProPosing.Avalonia" 2>/dev/null || true
-    echo -e "${GREEN}   ✅ Avalonia parada${NC}"
+  echo -e "${YELLOW}   Parando processos Avalonia órfãos...${NC}"
+  pkill -f "ProPosing.Avalonia" 2>/dev/null || true
+  echo -e "${GREEN}   ✅ Processos Avalonia finalizados${NC}"
 fi
 
 echo -e "${GREEN}✅ Todos os processos parados${NC}"

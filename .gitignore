@@ -58,6 +58,7 @@ interface/flutter/
 # Build executável
 build_app/
 dist/
+.pyinstaller_work/
 *.spec~
 
 # Logs
@@ -68,8 +69,12 @@ dist/
 # Runtime (PIDs)
 .backend.pid
 .backend_macos_pid
-.flutter_macos_pid
+.avalonia_macos_pid
 *.pid
+
+# Avalonia / .NET
+interface_avalonia/**/bin/
+interface_avalonia/**/obj/
 
 # Certificados/hashes gerados (não versionar)
 certificado_hash_*.txt

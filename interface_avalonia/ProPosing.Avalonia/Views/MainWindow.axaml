@@ -1,0 +1,171 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:ProPosing.Avalonia.ViewModels"
+        xmlns:converters="clr-namespace:ProPosing.Avalonia.Converters"
+        xmlns:controls="clr-namespace:ProPosing.Avalonia.Views.Controls"
+        x:Class="ProPosing.Avalonia.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="ProPosing"
+        Width="1600"
+        Height="920"
+        MinWidth="1280"
+        MinHeight="720"
+        Background="#0A0A0A"
+        KeyDown="OnWindowKeyDown"
+        mc:Ignorable="d">
+  <Window.Resources>
+    <converters:StatusToLabelConverter x:Key="StatusToLabel" />
+    <converters:StatusToBrushConverter x:Key="StatusToBrush" />
+    <converters:PoseModeMatchToBrushConverter x:Key="PoseModeMatchToBrush" />
+  </Window.Resources>
+
+  <Grid ColumnDefinitions="280,*,380">
+    <Border Grid.Column="0" Background="#1A1A2E">
+      <Grid RowDefinitions="120,*,72">
+        <Border Grid.Row="0"
+                BorderBrush="#4DEF4444"
+                BorderThickness="1">
+          <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+              <GradientStop Color="#4DEF4444" Offset="0" />
+              <GradientStop Color="#33B91C1C" Offset="1" />
+            </LinearGradientBrush>
+          </Border.Background>
+          <StackPanel Margin="16" Spacing="8">
+            <TextBlock Classes="panelTitle" Text="POSES" />
+            <TextBlock Text="Use 1-5 no teclado" Foreground="#CCFFFFFF" FontSize="12" />
+          </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="1" Margin="12" VerticalScrollBarVisibility="Auto">
+          <StackPanel Spacing="10">
+            <Button Classes="pose"
+                    Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=enquadramento|background}"
+                    BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=enquadramento|border}"
+                    Command="{Binding SelectPoseCommand}"
+                    CommandParameter="enquadramento">
+              <TextBlock Text="1. ENQUADRAMENTO" FontSize="15" VerticalAlignment="Center" />
+            </Button>
+
+            <Button Classes="pose"
+                    Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=double_biceps|background}"
+                    BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=double_biceps|border}"
+                    Command="{Binding SelectPoseCommand}"
+                    CommandParameter="double_biceps">
+              <TextBlock Text="2. DUPLO BICEPS" FontSize="15" VerticalAlignment="Center" />
+            </Button>
+
+            <Button Classes="pose"
+                    Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=side_chest|background}"
+                    BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=side_chest|border}"
+                    Command="{Binding SelectPoseCommand}"
+                    CommandParameter="side_chest">
+              <TextBlock Text="3. SIDE CHEST" FontSize="15" VerticalAlignment="Center" />
+            </Button>
+
+            <Button Classes="pose"
+                    Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=side_triceps|background}"
+                    BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=side_triceps|border}"
+                    Command="{Binding SelectPoseCommand}"
+                    CommandParameter="side_triceps">
+              <TextBlock Text="4. SIDE TRICEPS" FontSize="15" VerticalAlignment="Center" />
+            </Button>
+
+            <Button Classes="pose"
+                    Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=most_muscular|background}"
+                    BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=most_muscular|border}"
+                    Command="{Binding SelectPoseCommand}"
+                    CommandParameter="most_muscular">
+              <TextBlock Text="5. MOST MUSCULAR" FontSize="15" VerticalAlignment="Center" />
+            </Button>
+          </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="2"
+                Background="#201A1A2E"
+                BorderBrush="#40FFFFFF"
+                BorderThickness="1">
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+            <Ellipse Width="8" Height="8" Fill="{Binding FpsIndicatorBrush}" />
+            <TextBlock Text="{Binding Fps, StringFormat='FPS: {0}'}" FontSize="18" FontWeight="Bold" />
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Border>
+
+    <Border Grid.Column="1" Background="Black">
+      <Grid>
+        <Image Source="{Binding CameraFrame}" Stretch="Uniform" />
+        <controls:SkeletonOverlayControl Landmarks="{Binding Landmarks}"
+                                         Status="{Binding Status}"
+                                         ImageWidth="{Binding ImageWidth}"
+                                         ImageHeight="{Binding ImageHeight}" />
+
+        <Border Background="#00000000"
+                IsVisible="{Binding ShowPlaceholder}">
+          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+            <TextBlock Text="Aguardando câmera..." FontSize="24" Foreground="#D0FFFFFF" HorizontalAlignment="Center" />
+            <TextBlock Text="{Binding CameraError}" IsVisible="{Binding HasCameraError}" Foreground="#FFB4B4" HorizontalAlignment="Center" />
+            <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
+              <Button Content="Ativar câmera" Command="{Binding StartCameraCommand}" />
+              <Button Content="Parar" Command="{Binding StopCameraCommand}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Border>
+
+    <Border Grid.Column="2" Background="#16213E">
+      <StackPanel Margin="14" Spacing="14">
+        <Border Height="72"
+                CornerRadius="12"
+                BorderBrush="#4DEF4444"
+                BorderThickness="1">
+          <Border.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+              <GradientStop Color="#4DEF4444" Offset="0" />
+              <GradientStop Color="#33B91C1C" Offset="1" />
+            </LinearGradientBrush>
+          </Border.Background>
+          <TextBlock Text="AVALIAÇÃO"
+                     FontSize="30"
+                     FontWeight="Bold"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center" />
+        </Border>
+
+        <Border Classes="card">
+          <StackPanel Spacing="14">
+            <Border Height="48"
+                    CornerRadius="10"
+                    Background="{Binding Status, Converter={StaticResource StatusToBrush}}"
+                    BorderBrush="{Binding Status, Converter={StaticResource StatusToBrush}, ConverterParameter=border}"
+                    BorderThickness="1">
+              <TextBlock Text="{Binding Status, Converter={StaticResource StatusToLabel}}"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         FontWeight="Bold"
+                         FontSize="16" />
+            </Border>
+
+            <TextBlock Text="{Binding PoseQuality}" FontSize="18" TextWrapping="Wrap" />
+
+            <Border Height="100"
+                    CornerRadius="10"
+                    Background="#22000000"
+                    BorderBrush="#30FFFFFF"
+                    BorderThickness="1">
+              <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                <TextBlock Text="{Binding ProcessingTimeMs, StringFormat='Tempo: {0} ms'}" Foreground="#D7FFFFFF" />
+                <TextBlock Text="{Binding LandmarksCount, StringFormat='Landmarks: {0}'}" Foreground="#D7FFFFFF" />
+                <TextBlock Text="{Binding BackendUrl, StringFormat='Backend: {0}'}" Foreground="#B8FFFFFF" FontSize="12" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </Border>
+  </Grid>
+</Window>

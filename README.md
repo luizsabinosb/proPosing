@@ -9,7 +9,7 @@ Sistema de análise de poses de fisiculturismo em tempo real com visão computac
 O projeto é dividido em **dois componentes** que se comunicam via API REST:
 
 1. **Backend** (Python/FastAPI) — Processa frames da câmera com MediaPipe, avalia poses e retorna landmarks e feedback
-2. **Interface** (Flutter) — Exibe a câmera, envia frames para o backend e mostra o esqueleto + avaliação em tempo real
+2. **Interface** (Avalonia UI) — Exibe a câmera, envia frames para o backend e mostra o esqueleto + avaliação em tempo real
 
 **Fluxo:** Câmera → Interface captura frame → Envia Base64 ao backend → Backend processa com MediaPipe → Retorna landmarks + status → Interface desenha overlay e feedback.
 
@@ -20,8 +20,7 @@ O projeto é dividido em **dois componentes** que se comunicam via API REST:
 | Requisito | Uso |
 |-----------|-----|
 | **Python 3.10+** | Backend |
-| **Flutter SDK** | Interface |
-| **CocoaPods** | Interface macOS (`gem install cocoapods`) |
+| **.NET SDK 8+** | Interface Avalonia |
 | **Chrome** | Para rodar na web |
 
 ---
@@ -39,7 +38,16 @@ ProPosing/
 │   ├── requirements.txt
 │   └── run_standalone.py    # Launcher para app empacotado
 │
-├── interface/               # App Flutter
+├── interface_avalonia/      # App Avalonia (desktop)
+│   ├── ProPosing.Avalonia/
+│   │   ├── Views/           # Janela principal, overlay e componentes
+│   │   ├── ViewModels/      # Estado e comandos da UI
+│   │   ├── Services/        # Câmera, API e pipeline
+│   │   ├── Models/          # DTOs de request/response
+│   │   └── App.axaml
+│   └── README.md
+│
+├── interface/               # App Flutter (legado para web/mobile)
 │   ├── lib/
 │   │   ├── main.dart        # Entrada: escolhe CameraScreen ou CameraScreenMacOS
 │   │   ├── core/            # AppTheme, AppColors, PoseConstants
@@ -70,11 +78,14 @@ ProPosing/
 │   └── proposing_build.spec   # PyInstaller - empacotamento do backend
 │
 ├── scripts/                 # Scripts de automação
-│   ├── rodar_macos.sh       # Inicia backend + app macOS
+│   ├── rodar_macos.sh       # Inicia backend + app Avalonia (desktop padrão)
+│   ├── rodar_macos_avalonia.sh # Inicia backend + app Avalonia (desktop)
 │   ├── rodar_web.sh         # Inicia backend + app web (Chrome)
-│   ├── parar_projeto.sh     # Para backend e Flutter
+│   ├── parar_projeto.sh     # Para backend e Avalonia
+│   ├── parar_projeto_avalonia.sh # Para backend e Avalonia
 │   ├── iniciar_backend.sh   # Apenas backend
-│   ├── build_executable.sh  # Gera ProPosing.app
+│   ├── build_executable.sh  # Gera ProPosing.app (Avalonia)
+│   ├── build_avalonia_executable.sh # Build desktop Avalonia
 │   └── limpar_flutter_macos.sh  # Limpa build (resolve CodeSign)
 │
 └── README.md
@@ -93,7 +104,7 @@ ProPosing/
 ```
 
 - Inicia o backend na porta 8000
-- Roda o app Flutter em modo macOS
+- Roda o app Avalonia em modo desktop
 - Para parar: `Ctrl+C` ou, em outro terminal, `./scripts/parar_projeto.sh`
 
 ### Web (Chrome)
@@ -128,10 +139,8 @@ API: `http://localhost:8000` | Docs: `http://localhost:8000/docs`
 
 | Plataforma | Câmera | Tela |
 |------------|--------|------|
-| **macOS** | `camera_macos` (plugin local em `packages/`) | `CameraScreenMacOS` |
-| **Web, iOS, Android** | `camera` (plugin oficial) | `CameraScreen` |
-
-O `main.dart` detecta a plataforma e usa a tela correspondente.
+| **macOS, Windows, Linux** | OpenCvSharp (captura por frame) | Avalonia MainWindow |
+| **Web, iOS, Android (legado)** | `camera` (plugin oficial) | `CameraScreen` |
 
 ### API principal
 
@@ -141,7 +150,7 @@ O `main.dart` detecta a plataforma e usa a tela correspondente.
 ### Dependências principais
 
 - **Backend:** FastAPI, OpenCV, MediaPipe, NumPy, scikit-learn
-- **Interface:** Flutter, camera, camera_macos (path override local)
+- **Interface desktop:** Avalonia UI, OpenCvSharp, CommunityToolkit.Mvvm
 
 ---
 
@@ -153,7 +162,7 @@ O `main.dart` detecta a plataforma e usa a tela correspondente.
 
 Gera `build_app/ProPosing.app` — um único app que inicia backend e interface.
 
-**Requisitos:** Python3, Flutter SDK, PyInstaller (`pip3 install pyinstaller`)
+**Requisitos:** Python3, .NET SDK 8+, PyInstaller (`pip3 install pyinstaller`)
 
 **Se der erro de CodeSign:** execute `./scripts/limpar_flutter_macos.sh` (ou rode a partir da raiz) e rode o build novamente.
 
@@ -194,8 +203,8 @@ Atalhos 1–5 no teclado alternam entre as poses.
 |----------|---------|
 | Backend não conecta | `curl http://localhost:8000/health` — se falhar, rode `./scripts/iniciar_backend.sh` |
 | Câmera não funciona na web | Use localhost ou HTTPS. Execute `./scripts/rodar_web.sh` e permita a câmera no navegador |
-| Flutter não encontra backend | Web/desktop: localhost por padrão. Mobile: `flutter run --dart-define=API_HOST=192.168.x.x` |
-| Erro CodeSign no build macOS | `./scripts/limpar_flutter_macos.sh` e depois `./scripts/build_executable.sh` |
+| Avalonia não encontra backend | Desktop: localhost por padrão. Verifique `API_HOST` e `API_PORT` no ambiente |
+| Erro de build desktop | Verifique `.NET SDK 8+` e rode `./scripts/build_executable.sh` |
 | Câmera não inicia no macOS | Preferências do Sistema → Privacidade → Câmera — permitir para o app |
 
 ---
