@@ -16,15 +16,21 @@
     <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260318" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">
+  <!-- Runtime nativo: usa NETCoreSdkRuntimeIdentifier para detectar a plataforma automaticamente
+       mesmo quando -r não é passado para dotnet run/build. -->
+  <ItemGroup Condition="$(NETCoreSdkRuntimeIdentifier.StartsWith('osx-arm64')) OR '$(RuntimeIdentifier)' == 'osx-arm64'">
     <PackageReference Include="OpenCvSharp4.runtime.osx_arm64" Version="4.8.1-rc" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+  <ItemGroup Condition="$(NETCoreSdkRuntimeIdentifier.StartsWith('osx-x64')) OR '$(RuntimeIdentifier)' == 'osx-x64'">
+    <PackageReference Include="OpenCvSharp4.runtime.osx" Version="4.8.1-rc" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$(NETCoreSdkRuntimeIdentifier.StartsWith('win')) OR '$(RuntimeIdentifier)' == 'win-x64'">
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.11.0.20250507" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'linux-x64'">
+  <ItemGroup Condition="$(NETCoreSdkRuntimeIdentifier.StartsWith('linux')) OR '$(RuntimeIdentifier)' == 'linux-x64'">
     <PackageReference Include="OpenCvSharp4.official.runtime.linux-x64" Version="4.13.0.20260318" />
   </ItemGroup>
 </Project>

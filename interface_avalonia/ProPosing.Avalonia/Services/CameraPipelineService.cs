@@ -160,7 +160,18 @@ public sealed class CameraPipelineService
             var avf = new VideoCapture(_config.CameraIndex, (VideoCaptureAPIs)1200);
             if (avf.IsOpened())
             {
-                return avf;
+                // Valida leitura real — macOS pode abrir mas negar frame se permissão negada.
+                using var testFrame = new Mat();
+                if (avf.Read(testFrame) && !testFrame.Empty())
+                {
+                    return avf;
+                }
+                avf.Dispose();
+                // Conseguiu abrir mas não leu: quase certamente permissão negada no macOS.
+                Error?.Invoke(
+                    "Câmera aberta, mas sem frames. Acesse Ajustes do Sistema → Privacidade e Segurança → Câmera " +
+                    "e permita o acesso para o Terminal (ou para o app). Em seguida, reinicie.");
+                return new VideoCapture();
             }
             avf.Dispose();
         }
@@ -168,7 +179,16 @@ public sealed class CameraPipelineService
         var any = new VideoCapture(_config.CameraIndex, VideoCaptureAPIs.ANY);
         if (any.IsOpened())
         {
-            return any;
+            using var testFrame = new Mat();
+            if (any.Read(testFrame) && !testFrame.Empty())
+            {
+                return any;
+            }
+            any.Dispose();
+            Error?.Invoke(
+                "Câmera aberta, mas sem frames. Acesse Ajustes do Sistema → Privacidade e Segurança → Câmera " +
+                "e permita o acesso para o Terminal (ou para o app). Em seguida, reinicie.");
+            return new VideoCapture();
         }
         any.Dispose();
 
