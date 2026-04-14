@@ -1,7 +1,0 @@
-#include "../../Flutter/Flutter-Release.xcconfig"
-#include "Warnings.xcconfig"
-
-// Desabilita Code Sign para evitar erro "resource fork not allowed" (macOS)
-CODE_SIGN_IDENTITY = -
-CODE_SIGNING_REQUIRED = NO
-CODE_SIGNING_ALLOWED = NO

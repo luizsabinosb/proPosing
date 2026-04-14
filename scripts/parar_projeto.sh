@@ -1,6 +1,6 @@
 #!/bin/bash
 # Script para parar todos os processos do ProPosing
-# Funciona com rodar_macos.sh (Avalonia), rodar_web.sh e iniciar_backend.sh
+# Funciona com rodar_macos.sh (Avalonia) e iniciar_backend.sh
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
