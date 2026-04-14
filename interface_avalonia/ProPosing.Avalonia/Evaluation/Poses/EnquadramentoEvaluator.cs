@@ -1,0 +1,42 @@
+using ProPosing.Avalonia.Models;
+using static ProPosing.Avalonia.Evaluation.GeometryHelper;
+
+namespace ProPosing.Avalonia.Evaluation.Poses;
+
+public sealed class EnquadramentoEvaluator : IPoseEvaluator
+{
+    public string PoseMode => "enquadramento";
+
+    public PoseFeedback Evaluate(IReadOnlyList<LandmarkPoint> lms)
+    {
+        var ls = lms[Idx.LeftShoulder];
+        var rs = lms[Idx.RightShoulder];
+
+        if (!IsVisible(ls) || !IsVisible(rs))
+            return new PoseFeedback("incorrect", "Ombros não visíveis — recue um pouco", []);
+
+        var errors = new List<string>();
+
+        // Horizontal centering: midpoint of shoulders should be near 0.5
+        // Python equivalent: offset < width * 0.1  →  abs(midX - 0.5) < 0.1
+        double midX = (ls.X + rs.X) / 2.0;
+        if (midX < 0.40)
+            errors.Add("Mova para a direita para centralizar");
+        else if (midX > 0.60)
+            errors.Add("Mova para a esquerda para centralizar");
+
+        // Distance from camera: shoulder span in normalized space
+        double span = Math.Abs(ls.X - rs.X);
+        if (span < 0.18)
+            errors.Add("Muito longe — aproxime-se da câmera");
+        else if (span > 0.55)
+            errors.Add("Muito perto — afaste-se da câmera");
+
+        // Vertical: shoulders should be in upper portion of frame
+        double shoulderMidY = (ls.Y + rs.Y) / 2.0;
+        if (shoulderMidY > 0.65)
+            errors.Add("Muito baixo no quadro — recue ou ajuste a câmera");
+
+        return PoseFeedback.FromErrors(errors, "Enquadramento perfeito!");
+    }
+}

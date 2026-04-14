@@ -13,20 +13,26 @@ public sealed class StatusToBrushConverter : IValueConverter
 
         return role switch
         {
+            "accent" => status switch
+            {
+                "correct"            => Brush.Parse("#10B981"),
+                "incorrect"          => Brush.Parse("#EF4444"),
+                "adjustment_needed"  => Brush.Parse("#F59E0B"),
+                _                    => Brush.Parse("#6B7280"),
+            },
             "border" => status switch
             {
-                "correct" => Brush.Parse("#58C46B"),
-                "incorrect" => Brush.Parse("#EF4444"),
-                "adjustment_needed" => Brush.Parse("#F59E0B"),
-                _ => Brush.Parse("#6B7280"),
+                "correct"            => Brush.Parse("#4010B981"),
+                "incorrect"          => Brush.Parse("#40EF4444"),
+                "adjustment_needed"  => Brush.Parse("#40F59E0B"),
+                _                    => Brush.Parse("#406B7280"),
             },
-            "text" => Brushes.White,
-            _ => status switch
+            _ => status switch  // "fill" — card background
             {
-                "correct" => Brush.Parse("#2258C46B"),
-                "incorrect" => Brush.Parse("#22EF4444"),
-                "adjustment_needed" => Brush.Parse("#22F59E0B"),
-                _ => Brush.Parse("#224B5563"),
+                "correct"            => Brush.Parse("#1210B981"),
+                "incorrect"          => Brush.Parse("#12EF4444"),
+                "adjustment_needed"  => Brush.Parse("#12F59E0B"),
+                _                    => Brush.Parse("#126B7280"),
             },
         };
     }

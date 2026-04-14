@@ -10,13 +10,13 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ProPosing.Avalonia.Models;
 using ProPosing.Avalonia.Services;
+using System;
 
 namespace ProPosing.Avalonia.ViewModels;
 
 public partial class MainWindowViewModel : ObservableObject
 {
     private readonly AppConfig _config;
-    private readonly PoseApiClient _apiClient;
     private readonly CameraPipelineService _cameraPipelineService;
 
     [ObservableProperty]
@@ -38,9 +38,6 @@ public partial class MainWindowViewModel : ObservableObject
     private int _fps;
 
     [ObservableProperty]
-    private int _processingTimeMs;
-
-    [ObservableProperty]
     private int _landmarksCount;
 
     [ObservableProperty]
@@ -53,12 +50,19 @@ public partial class MainWindowViewModel : ObservableObject
     private bool _isRunning;
 
     [ObservableProperty]
+    private Bitmap? _referenceImage;
+
+    public bool HasReferenceImage => ReferenceImage is not null;
+
+    [ObservableProperty]
     private IReadOnlyList<LandmarkPoint> _landmarks = [];
 
-    public MainWindowViewModel(AppConfig config, PoseApiClient apiClient, CameraPipelineService cameraPipelineService)
+    [ObservableProperty]
+    private IReadOnlyList<string> _hints = [];
+
+    public MainWindowViewModel(AppConfig config, CameraPipelineService cameraPipelineService)
     {
         _config = config;
-        _apiClient = apiClient;
         _cameraPipelineService = cameraPipelineService;
 
         Poses = new ObservableCollection<PoseOption>
@@ -76,7 +80,6 @@ public partial class MainWindowViewModel : ObservableObject
 
     public ObservableCollection<PoseOption> Poses { get; }
 
-    public string BackendUrl => _config.ApiBaseUrl;
     public bool HasFrame => CameraFrame is not null;
     public bool ShowPlaceholder => !HasFrame;
     public bool HasCameraError => !string.IsNullOrWhiteSpace(CameraError);
@@ -85,19 +88,9 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private async Task StartCameraAsync()
     {
-        if (IsRunning)
-        {
-            return;
-        }
+        if (IsRunning) return;
 
-        if (!await _apiClient.HealthAsync())
-        {
-            CameraError = $"Backend não respondeu em {_config.ApiBaseUrl}/health";
-        }
-        else
-        {
-            CameraError = string.Empty;
-        }
+        CameraError = string.Empty;
         _cameraPipelineService.SetPoseMode(SelectedPoseMode);
         await _cameraPipelineService.StartAsync();
         IsRunning = true;
@@ -111,23 +104,13 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task SelectPoseAsync(string mode)
+    private Task SelectPoseAsync(string mode)
     {
-        if (string.IsNullOrWhiteSpace(mode))
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(mode)) return Task.CompletedTask;
 
         SelectedPoseMode = mode;
         _cameraPipelineService.SetPoseMode(mode);
-        try
-        {
-            await _apiClient.SelectPoseAsync(mode);
-        }
-        catch
-        {
-            // Sync opcional com backend, sem quebrar UX local.
-        }
+        return Task.CompletedTask;
     }
 
     [RelayCommand]
@@ -159,28 +142,40 @@ public partial class MainWindowViewModel : ObservableObject
         Dispatcher.UIThread.Post(() => CameraError = message);
     }
 
+    public bool HasHints => Hints.Count > 0;
+
+    public string SelectedPoseLabel =>
+        Poses.FirstOrDefault(p => p.Mode == SelectedPoseMode)?.Label ?? SelectedPoseMode.ToUpperInvariant();
+
+    // Prevents queuing more than one pending UI update at a time.
+    private volatile bool _renderPending;
+
     private void OnFrameReady(PipelineUpdate update)
     {
+        if (_renderPending) return;  // drop frame — UI still processing previous one
+        _renderPending = true;
+
         Dispatcher.UIThread.Post(() =>
         {
-            CameraFrame = CreateBitmap(update.BgraBuffer, update.Width, update.Height);
-            Fps = update.Fps;
-
-            var evaluation = update.Evaluation;
-            if (evaluation is null)
+            try
             {
-                return;
-            }
+                CameraFrame    = CreateBitmap(update.BgraBuffer, update.Width, update.Height);
+                Fps            = update.Fps;
+                Landmarks      = update.Landmarks;
+                LandmarksCount = update.Landmarks.Count;
+                ImageWidth     = update.Width;
+                ImageHeight    = update.Height;
 
-            Status = evaluation.Status;
-            PoseQuality = string.IsNullOrWhiteSpace(evaluation.PoseQuality)
-                ? DefaultMessageForStatus(evaluation.Status)
-                : evaluation.PoseQuality;
-            ProcessingTimeMs = evaluation.ProcessingTimeMs;
-            LandmarksCount = evaluation.Landmarks.Count;
-            Landmarks = evaluation.Landmarks;
-            ImageWidth = evaluation.ImageWidth ?? update.Width;
-            ImageHeight = evaluation.ImageHeight ?? update.Height;
+                var fb = update.Feedback;
+                Status      = fb?.Status   ?? "no_detection";
+                PoseQuality = fb?.Message  ?? "Aguardando detecção...";
+                Hints       = fb?.Hints    ?? [];
+                OnPropertyChanged(nameof(HasHints));
+            }
+            finally
+            {
+                _renderPending = false;
+            }
         });
     }
 
@@ -191,21 +186,9 @@ public partial class MainWindowViewModel : ObservableObject
             new Vector(96, 96),
             PixelFormat.Bgra8888,
             AlphaFormat.Unpremul);
-
         using var locked = bitmap.Lock();
         Marshal.Copy(bgraBuffer, 0, locked.Address, bgraBuffer.Length);
         return bitmap;
-    }
-
-    private static string DefaultMessageForStatus(string status)
-    {
-        return status switch
-        {
-            "correct" => "Posição correta.",
-            "incorrect" => "Posição incorreta. Ajuste necessário.",
-            "adjustment_needed" => "Ajuste fino necessário.",
-            _ => "Aguardando detecção...",
-        };
     }
 
     partial void OnCameraFrameChanged(WriteableBitmap? value)
@@ -222,5 +205,42 @@ public partial class MainWindowViewModel : ObservableObject
     partial void OnFpsChanged(int value)
     {
         OnPropertyChanged(nameof(FpsIndicatorBrush));
+    }
+
+    partial void OnSelectedPoseModeChanged(string value)
+    {
+        ReferenceImage = LoadReferenceImage(value);
+        OnPropertyChanged(nameof(HasReferenceImage));
+        OnPropertyChanged(nameof(SelectedPoseLabel));
+    }
+
+    partial void OnReferenceImageChanged(Bitmap? value)
+    {
+        OnPropertyChanged(nameof(HasReferenceImage));
+    }
+
+    private static readonly Dictionary<string, string> _referenceImageFiles = new()
+    {
+        ["double_biceps"]  = "doubleBiceps.jpg",
+        ["side_chest"]     = "sideChest.jpg",
+        ["side_triceps"]   = "sideTriceps.png",
+        ["most_muscular"]  = "mostMuscular.png",
+    };
+
+    private static Bitmap? LoadReferenceImage(string poseMode)
+    {
+        if (!_referenceImageFiles.TryGetValue(poseMode, out var filename))
+            return null;
+
+        try
+        {
+            var uri = new Uri($"avares://ProPosing.Avalonia/Assets/References/{filename}");
+            using var stream = AssetLoader.Open(uri);
+            return new Bitmap(stream);
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

@@ -7,7 +7,7 @@
         xmlns:controls="clr-namespace:ProPosing.Avalonia.Views.Controls"
         x:Class="ProPosing.Avalonia.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="ProPosing"
+        Title="proPosing"
         Width="1600"
         Height="920"
         MinWidth="1280"
@@ -15,157 +15,327 @@
         Background="#0A0A0A"
         KeyDown="OnWindowKeyDown"
         mc:Ignorable="d">
+
   <Window.Resources>
     <converters:StatusToLabelConverter x:Key="StatusToLabel" />
     <converters:StatusToBrushConverter x:Key="StatusToBrush" />
     <converters:PoseModeMatchToBrushConverter x:Key="PoseModeMatchToBrush" />
   </Window.Resources>
 
-  <Grid ColumnDefinitions="280,*,380">
-    <Border Grid.Column="0" Background="#1A1A2E">
-      <Grid RowDefinitions="120,*,72">
-        <Border Grid.Row="0"
-                BorderBrush="#4DEF4444"
-                BorderThickness="1">
-          <Border.Background>
-            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-              <GradientStop Color="#4DEF4444" Offset="0" />
-              <GradientStop Color="#33B91C1C" Offset="1" />
-            </LinearGradientBrush>
-          </Border.Background>
-          <StackPanel Margin="16" Spacing="8">
-            <TextBlock Classes="panelTitle" Text="POSES" />
-            <TextBlock Text="Use 1-5 no teclado" Foreground="#CCFFFFFF" FontSize="12" />
+  <!-- Root: top branding bar + main content -->
+  <Grid RowDefinitions="52,*">
+
+    <!-- ── Top branding bar ─────────────────────────────────────────── -->
+    <Border Grid.Row="0" Background="#0A0A0A">
+      <Border BorderBrush="#33EF4444" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="*,Auto" Margin="20,0">
+          <StackPanel Orientation="Horizontal"
+                      VerticalAlignment="Center"
+                      Spacing="0">
+            <TextBlock Text="pro"
+                       FontFamily="Ethnocentric"
+                       FontSize="22"
+                       FontWeight="Bold"
+                       FontStyle="Italic"
+                       Foreground="White" />
+            <TextBlock Text="Posing"
+                       FontFamily="Ethnocentric"
+                       FontSize="22"
+                       FontWeight="Bold"
+                       Foreground="#EF4444" />
           </StackPanel>
-        </Border>
-
-        <ScrollViewer Grid.Row="1" Margin="12" VerticalScrollBarVisibility="Auto">
-          <StackPanel Spacing="10">
-            <Button Classes="pose"
-                    Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=enquadramento|background}"
-                    BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=enquadramento|border}"
-                    Command="{Binding SelectPoseCommand}"
-                    CommandParameter="enquadramento">
-              <TextBlock Text="1. ENQUADRAMENTO" FontSize="15" VerticalAlignment="Center" />
-            </Button>
-
-            <Button Classes="pose"
-                    Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=double_biceps|background}"
-                    BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=double_biceps|border}"
-                    Command="{Binding SelectPoseCommand}"
-                    CommandParameter="double_biceps">
-              <TextBlock Text="2. DUPLO BICEPS" FontSize="15" VerticalAlignment="Center" />
-            </Button>
-
-            <Button Classes="pose"
-                    Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=side_chest|background}"
-                    BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=side_chest|border}"
-                    Command="{Binding SelectPoseCommand}"
-                    CommandParameter="side_chest">
-              <TextBlock Text="3. SIDE CHEST" FontSize="15" VerticalAlignment="Center" />
-            </Button>
-
-            <Button Classes="pose"
-                    Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=side_triceps|background}"
-                    BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=side_triceps|border}"
-                    Command="{Binding SelectPoseCommand}"
-                    CommandParameter="side_triceps">
-              <TextBlock Text="4. SIDE TRICEPS" FontSize="15" VerticalAlignment="Center" />
-            </Button>
-
-            <Button Classes="pose"
-                    Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=most_muscular|background}"
-                    BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=most_muscular|border}"
-                    Command="{Binding SelectPoseCommand}"
-                    CommandParameter="most_muscular">
-              <TextBlock Text="5. MOST MUSCULAR" FontSize="15" VerticalAlignment="Center" />
-            </Button>
-          </StackPanel>
-        </ScrollViewer>
-
-        <Border Grid.Row="2"
-                Background="#201A1A2E"
-                BorderBrush="#40FFFFFF"
-                BorderThickness="1">
-          <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
-            <Ellipse Width="8" Height="8" Fill="{Binding FpsIndicatorBrush}" />
-            <TextBlock Text="{Binding Fps, StringFormat='FPS: {0}'}" FontSize="18" FontWeight="Bold" />
-          </StackPanel>
-        </Border>
-      </Grid>
+          <TextBlock Grid.Column="1"
+                     Text="Powered by Feral Tech Supplies"
+                     FontSize="12"
+                     FontStyle="Italic"
+                     Foreground="#55FFFFFF"
+                     VerticalAlignment="Center"
+                     Margin="0,0,4,0" />
+        </Grid>
+      </Border>
     </Border>
 
-    <Border Grid.Column="1" Background="Black">
-      <Grid>
-        <Image Source="{Binding CameraFrame}" Stretch="Uniform" />
-        <controls:SkeletonOverlayControl Landmarks="{Binding Landmarks}"
-                                         Status="{Binding Status}"
-                                         ImageWidth="{Binding ImageWidth}"
-                                         ImageHeight="{Binding ImageHeight}" />
+    <!-- ── Main 3-column layout ─────────────────────────────────────── -->
+    <Grid Grid.Row="1" ColumnDefinitions="260,*,440">
 
-        <Border Background="#00000000"
-                IsVisible="{Binding ShowPlaceholder}">
-          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
-            <TextBlock Text="Aguardando câmera..." FontSize="24" Foreground="#D0FFFFFF" HorizontalAlignment="Center" />
-            <TextBlock Text="{Binding CameraError}" IsVisible="{Binding HasCameraError}" Foreground="#FFB4B4" HorizontalAlignment="Center" />
-            <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
-              <Button Content="Ativar câmera" Command="{Binding StartCameraCommand}" />
-              <Button Content="Parar" Command="{Binding StopCameraCommand}" />
+      <!-- LEFT — Poses panel -->
+      <Border Grid.Column="0" Background="#0D0D0D" BorderBrush="#22EF4444" BorderThickness="0,0,1,0">
+        <Grid RowDefinitions="Auto,*,56">
+
+          <!-- Poses header -->
+          <Border Grid.Row="0" Padding="16,14">
+            <StackPanel Spacing="4">
+              <TextBlock Classes="panelTitle" Text="SELEÇÃO DE POSE" />
+              <TextBlock Text="Teclas 1 – 5 para trocar" Foreground="#55FFFFFF" FontSize="11" />
             </StackPanel>
-          </StackPanel>
-        </Border>
-      </Grid>
-    </Border>
+          </Border>
 
-    <Border Grid.Column="2" Background="#16213E">
-      <StackPanel Margin="14" Spacing="14">
-        <Border Height="72"
-                CornerRadius="12"
-                BorderBrush="#4DEF4444"
-                BorderThickness="1">
-          <Border.Background>
-            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-              <GradientStop Color="#4DEF4444" Offset="0" />
-              <GradientStop Color="#33B91C1C" Offset="1" />
-            </LinearGradientBrush>
-          </Border.Background>
-          <TextBlock Text="AVALIAÇÃO"
-                     FontSize="30"
-                     FontWeight="Bold"
-                     HorizontalAlignment="Center"
-                     VerticalAlignment="Center" />
-        </Border>
+          <!-- Pose buttons -->
+          <ScrollViewer Grid.Row="1" Margin="10,0,10,10" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="8">
 
-        <Border Classes="card">
-          <StackPanel Spacing="14">
-            <Border Height="48"
-                    CornerRadius="10"
+              <Button Classes="pose"
+                      Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=enquadramento|background}"
+                      BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=enquadramento|border}"
+                      Command="{Binding SelectPoseCommand}"
+                      CommandParameter="enquadramento">
+                <TextBlock Text="1. ENQUADRAMENTO" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+              </Button>
+
+              <Button Classes="pose"
+                      Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=double_biceps|background}"
+                      BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=double_biceps|border}"
+                      Command="{Binding SelectPoseCommand}"
+                      CommandParameter="double_biceps">
+                <TextBlock Text="2. DUPLO BÍCEPS" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+              </Button>
+
+              <Button Classes="pose"
+                      Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=side_chest|background}"
+                      BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=side_chest|border}"
+                      Command="{Binding SelectPoseCommand}"
+                      CommandParameter="side_chest">
+                <TextBlock Text="3. SIDE CHEST" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+              </Button>
+
+              <Button Classes="pose"
+                      Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=side_triceps|background}"
+                      BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=side_triceps|border}"
+                      Command="{Binding SelectPoseCommand}"
+                      CommandParameter="side_triceps">
+                <TextBlock Text="4. SIDE TRÍCEPS" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+              </Button>
+
+              <Button Classes="pose"
+                      Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=most_muscular|background}"
+                      BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=most_muscular|border}"
+                      Command="{Binding SelectPoseCommand}"
+                      CommandParameter="most_muscular">
+                <TextBlock Text="5. MOST MUSCULAR" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+              </Button>
+
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- FPS indicator 
+          <Border Grid.Row="2"
+                  Background="#0A0A0A"
+                  BorderBrush="#22EF4444"
+                  BorderThickness="0,1,0,0">
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="8">
+              <Ellipse Width="8" Height="8" Fill="{Binding FpsIndicatorBrush}" />
+              <TextBlock Text="{Binding Fps, StringFormat='FPS: {0}'}"
+                         FontSize="16" FontWeight="Bold" />
+            </StackPanel>
+          </Border>-->
+
+        </Grid>
+      </Border>
+
+      <!-- CENTER — Camera feed -->
+      <Border Grid.Column="1" Background="Black">
+        <Grid>
+          <Image Source="{Binding CameraFrame}" Stretch="Uniform" />
+          <controls:SkeletonOverlayControl Landmarks="{Binding Landmarks}"
+                                           Status="{Binding Status}"
+                                           ImageWidth="{Binding ImageWidth}"
+                                           ImageHeight="{Binding ImageHeight}" />
+
+          <!-- Placeholder when camera is off -->
+          <Border Background="#00000000" IsVisible="{Binding ShowPlaceholder}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
+              <TextBlock Text="Aguardando câmera..."
+                         FontSize="22"
+                         Foreground="#60FFFFFF"
+                         HorizontalAlignment="Center" />
+              <TextBlock Text="{Binding CameraError}"
+                         IsVisible="{Binding HasCameraError}"
+                         Foreground="#EF4444"
+                         FontSize="13"
+                         HorizontalAlignment="Center"
+                         TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                <Button Content="Ativar câmera" Command="{Binding StartCameraCommand}" />
+                <Button Content="Parar" Command="{Binding StopCameraCommand}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+        </Grid>
+      </Border>
+
+      <!-- RIGHT — Evaluation panel -->
+      <Border Grid.Column="2" Background="#0D0D0D" BorderBrush="#22EF4444" BorderThickness="1,0,0,0">
+        <Grid RowDefinitions="Auto,*" Margin="16,16,16,16">
+
+          <!-- TOP: header + feedback card + stats -->
+          <StackPanel Grid.Row="0" Spacing="12">
+
+            <!-- Section header -->
+            <TextBlock Text="AVALIAÇÃO" Classes="panelTitle" Margin="0,0,0,4" />
+
+            <!-- ── Single feedback card ──────────────────────────────── -->
+            <Border CornerRadius="12"
                     Background="{Binding Status, Converter={StaticResource StatusToBrush}}"
                     BorderBrush="{Binding Status, Converter={StaticResource StatusToBrush}, ConverterParameter=border}"
-                    BorderThickness="1">
-              <TextBlock Text="{Binding Status, Converter={StaticResource StatusToLabel}}"
-                         HorizontalAlignment="Center"
-                         VerticalAlignment="Center"
-                         FontWeight="Bold"
-                         FontSize="16" />
-            </Border>
+                    BorderThickness="1"
+                    Padding="16,14">
+              <StackPanel Spacing="10">
 
-            <TextBlock Text="{Binding PoseQuality}" FontSize="18" TextWrapping="Wrap" />
+                <!-- Status label row -->
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                  <Ellipse Width="8" Height="8"
+                           Fill="{Binding Status, Converter={StaticResource StatusToBrush}, ConverterParameter=accent}" />
+                  <TextBlock Text="{Binding Status, Converter={StaticResource StatusToLabel}}"
+                             FontSize="11"
+                             FontWeight="Bold"
+                             Foreground="{Binding Status, Converter={StaticResource StatusToBrush}, ConverterParameter=accent}" />
+                </StackPanel>
 
-            <Border Height="100"
-                    CornerRadius="10"
-                    Background="#22000000"
-                    BorderBrush="#30FFFFFF"
-                    BorderThickness="1">
-              <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
-                <TextBlock Text="{Binding ProcessingTimeMs, StringFormat='Tempo: {0} ms'}" Foreground="#D7FFFFFF" />
-                <TextBlock Text="{Binding LandmarksCount, StringFormat='Landmarks: {0}'}" Foreground="#D7FFFFFF" />
-                <TextBlock Text="{Binding BackendUrl, StringFormat='Backend: {0}'}" Foreground="#B8FFFFFF" FontSize="12" />
+                <!-- Thin divider -->
+                <Border Height="1" Background="#18FFFFFF" />
+
+                <!-- Main message — large, easy to scan at a glance -->
+                <TextBlock Text="{Binding PoseQuality}"
+                           FontSize="17"
+                           FontWeight="SemiBold"
+                           Foreground="White"
+                           TextWrapping="Wrap"
+                           LineHeight="24" />
+
+                <!-- Secondary corrections (model guarantees no duplication) -->
+                <ItemsControl ItemsSource="{Binding Hints}"
+                              IsVisible="{Binding HasHints}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,0,0">
+                        <TextBlock Text="›"
+                                   Foreground="#70FFFFFF"
+                                   FontSize="13"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding}"
+                                   FontSize="13"
+                                   Foreground="#AAFFFFFF"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Center" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
               </StackPanel>
             </Border>
+
+            <!-- Stats row -->
+            <Grid ColumnDefinitions="*,*" Margin="0,4,0,0">
+              <Border Grid.Column="0" Classes="statCard" Margin="0,0,6,0">
+                <StackPanel HorizontalAlignment="Center">
+                  <TextBlock Text="{Binding Fps}"
+                             FontSize="26" FontWeight="Bold"
+                             Foreground="#EF4444"
+                             HorizontalAlignment="Center" />
+                  <TextBlock Text="FPS"
+                             FontSize="11" Foreground="#55FFFFFF"
+                             HorizontalAlignment="Center" />
+                </StackPanel>
+              </Border>
+              <Border Grid.Column="1" Classes="statCard" Margin="6,0,0,0">
+                <StackPanel HorizontalAlignment="Center">
+                  <TextBlock Text="{Binding LandmarksCount}"
+                             FontSize="26" FontWeight="Bold"
+                             Foreground="#EF4444"
+                             HorizontalAlignment="Center" />
+                  <TextBlock Text="pontos"
+                             FontSize="11" Foreground="#55FFFFFF"
+                             HorizontalAlignment="Center" />
+                </StackPanel>
+              </Border>
+            </Grid>
+
           </StackPanel>
-        </Border>
-      </StackPanel>
-    </Border>
+
+          <!-- BOTTOM: Reference pose image — fills remaining space -->
+          <Border Grid.Row="1"
+                  CornerRadius="12"
+                  Background="#111111"
+                  BorderBrush="#2AEF4444"
+                  BorderThickness="1"
+                  ClipToBounds="True"
+                  Margin="0,12,0,0">
+            <Panel>
+
+              <!-- Image available -->
+              <Grid IsVisible="{Binding HasReferenceImage}">
+                <Image Source="{Binding ReferenceImage}"
+                       Stretch="UniformToFill"
+                       Opacity="0.82"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center" />
+
+                <!-- Top fade / vignette -->
+                <Border VerticalAlignment="Top" Height="56">
+                  <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                      <GradientStop Offset="0" Color="#DD111111" />
+                      <GradientStop Offset="1" Color="#00111111" />
+                    </LinearGradientBrush>
+                  </Border.Background>
+                </Border>
+
+                <!-- Bottom overlay with label -->
+                <Border VerticalAlignment="Bottom" Padding="14,10">
+                  <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                      <GradientStop Offset="0" Color="#00111111" />
+                      <GradientStop Offset="1" Color="#EE111111" />
+                    </LinearGradientBrush>
+                  </Border.Background>
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="REFERÊNCIA"
+                               FontSize="10"
+                               FontWeight="Bold"
+                               Foreground="#55EF4444"
+                               LetterSpacing="2" />
+                    <TextBlock Text="{Binding SelectedPoseLabel}"
+                               FontSize="13"
+                               FontWeight="Bold"
+                               Foreground="#CCFFFFFF"
+                               LetterSpacing="1" />
+                  </StackPanel>
+                </Border>
+
+                <!-- Thin red accent line at bottom -->
+                <Border VerticalAlignment="Bottom"
+                        Height="2"
+                        Background="#66EF4444"
+                        HorizontalAlignment="Stretch" />
+              </Grid>
+
+              <!-- Placeholder when no reference (e.g. enquadramento) -->
+              <StackPanel IsVisible="{Binding !HasReferenceImage}"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Spacing="8">
+                <TextBlock Text="SEM REFERÊNCIA"
+                           FontSize="11"
+                           FontWeight="Bold"
+                           Foreground="#33FFFFFF"
+                           HorizontalAlignment="Center"
+                           LetterSpacing="2" />
+                <TextBlock Text="Modo de enquadramento"
+                           FontSize="11"
+                           Foreground="#22FFFFFF"
+                           HorizontalAlignment="Center" />
+              </StackPanel>
+
+            </Panel>
+          </Border>
+
+        </Grid>
+      </Border>
+
+    </Grid>
   </Grid>
 </Window>

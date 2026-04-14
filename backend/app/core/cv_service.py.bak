@@ -1,0 +1,405 @@
+"""
+Serviço de Visão Computacional
+"""
+import logging
+import time
+from typing import Any, Dict, Optional, Tuple
+
+import cv2
+import numpy as np
+
+from proposing.pose_evaluator import PoseDetector
+from proposing.ml_evaluator import MLEvaluator
+from proposing.pose_metrics_loader import get_metrics_loader
+
+logger = logging.getLogger(__name__)
+
+# Dimensão máxima do lado maior antes de enviar ao MediaPipe.
+# 640 px é suficiente para pose detection e ~2-3× mais rápido que 1280 px.
+_MEDIAPIPE_MAX_SIDE = 640
+
+Point2D = Tuple[int, int]
+Point3D = Tuple[int, int, float]
+
+
+class CVService:
+    """Serviço principal de visão computacional."""
+
+    MODE_NAMES: Dict[str, str] = {
+        "double_biceps": "Duplo Biceps (Frente)",
+        "side_chest": "Side Chest",
+        "side_triceps": "Side Triceps",
+        "most_muscular": "Most Muscular",
+        "enquadramento": "Enquadramento",
+    }
+
+    # Buffer RGB reutilizado entre frames (evita alocação a cada frame).
+    _rgb_buffer: Optional[np.ndarray] = None
+
+    def __init__(self, use_ml: bool = True) -> None:
+        self.detector = PoseDetector()
+        self.use_ml = use_ml
+        self.ml_evaluator: Optional[MLEvaluator] = None
+
+        if use_ml:
+            ml = MLEvaluator()
+            if ml.models_loaded:
+                self.ml_evaluator = ml
+            else:
+                logger.warning("Modelos ML não encontrados. Usando apenas regras.")
+
+        # Verifica métricas dinâmicas uma única vez na inicialização.
+        try:
+            loader = get_metrics_loader()
+            n = len(loader.metrics_cache)
+            if n:
+                logger.info("Métricas dinâmicas carregadas para %d pose(s).", n)
+            else:
+                logger.info("Usando métricas padrão (hardcoded).")
+        except Exception as exc:
+            logger.warning("Erro ao carregar métricas dinâmicas: %s. Usando padrão.", exc)
+
+    # ------------------------------------------------------------------
+    # API pública
+    # ------------------------------------------------------------------
+
+    def process_frame(
+        self,
+        frame: np.ndarray,
+        pose_mode: str,
+        camera_width: int,
+    ) -> Tuple[np.ndarray, Optional[str], Optional[Any]]:
+        """
+        Processa um frame e retorna avaliação da pose.
+
+        Returns:
+            (frame_anotado, mensagem_qualidade, landmarks_obj)
+        """
+        t0 = time.perf_counter()
+
+        # --- Redimensiona para acelerar o MediaPipe ---
+        h_orig, w_orig = frame.shape[:2]
+        scale = min(1.0, _MEDIAPIPE_MAX_SIDE / max(h_orig, w_orig))
+        if scale < 1.0:
+            small = cv2.resize(
+                frame,
+                (int(w_orig * scale), int(h_orig * scale)),
+                interpolation=cv2.INTER_AREA,
+            )
+        else:
+            small = frame
+
+        # --- Conversão BGR→RGB reutilizando buffer ---
+        if (
+            self._rgb_buffer is None
+            or self._rgb_buffer.shape != small.shape
+        ):
+            self._rgb_buffer = np.empty_like(small)
+        cv2.cvtColor(small, cv2.COLOR_BGR2RGB, dst=self._rgb_buffer)
+
+        results = self.detector.pose.process(self._rgb_buffer)
+
+        pose_quality: Optional[str] = None
+        landmarks_obj = None
+
+        if results.pose_landmarks:
+            landmarks_obj = results.pose_landmarks
+
+            # Desenha esqueleto no frame ORIGINAL (não no redimensionado)
+            self.detector.mp_drawing.draw_landmarks(
+                frame,
+                results.pose_landmarks,
+                self.detector.mp_pose.POSE_CONNECTIONS,
+                landmark_drawing_spec=self.detector.mp_drawing.DrawingSpec(
+                    color=(0, 255, 0), thickness=2, circle_radius=2
+                ),
+                connection_drawing_spec=self.detector.mp_drawing.DrawingSpec(
+                    color=(255, 255, 255), thickness=2
+                ),
+            )
+
+            landmarks = results.pose_landmarks.landmark
+
+            points = self._extract_keypoints(landmarks, camera_width, h_orig)
+            if not points:
+                return frame, "Não foi possível detectar os pontos necessários", None
+
+            angles = self._calculate_angles(points)
+            pose_quality = self._evaluate_pose(pose_mode, points, angles, camera_width)
+
+            # Combina com ML se disponível
+            if self.ml_evaluator and landmarks_obj:
+                try:
+                    ml_result = self.ml_evaluator.evaluate_with_ml(
+                        landmarks_obj.landmark, pose_mode
+                    )
+                    combined = self.ml_evaluator.combine_with_rules(ml_result, pose_quality)
+                    pose_quality = combined["final_feedback"]
+                except Exception as exc:
+                    logger.debug("ML fallback para regras: %s", exc)
+
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        logger.debug("process_frame: %d ms (scale=%.2f)", elapsed_ms, scale)
+
+        return frame, pose_quality, landmarks_obj
+
+    # ------------------------------------------------------------------
+    # Extração de keypoints
+    # ------------------------------------------------------------------
+
+    def _extract_keypoints(
+        self,
+        landmarks: Any,
+        camera_width: int,
+        height: int,
+    ) -> Dict[str, Point3D]:
+        """Extrai pontos importantes do corpo com coordenadas em pixels."""
+        lm_enum = self.detector.mp_pose.PoseLandmark
+        points: Dict[str, Point3D] = {}
+
+        try:
+            def _get(idx: int) -> Point3D:
+                lm = landmarks[idx]
+                return (
+                    int(lm.x * camera_width),
+                    int(lm.y * height),
+                    float(getattr(lm, "visibility", 1.0)),
+                )
+
+            for name, idx in (
+                ("LEFT_SHOULDER",  lm_enum.LEFT_SHOULDER.value),
+                ("RIGHT_SHOULDER", lm_enum.RIGHT_SHOULDER.value),
+                ("LEFT_ELBOW",     lm_enum.LEFT_ELBOW.value),
+                ("RIGHT_ELBOW",    lm_enum.RIGHT_ELBOW.value),
+                ("LEFT_WRIST",     lm_enum.LEFT_WRIST.value),
+                ("RIGHT_WRIST",    lm_enum.RIGHT_WRIST.value),
+                ("LEFT_HIP",       lm_enum.LEFT_HIP.value),
+                ("RIGHT_HIP",      lm_enum.RIGHT_HIP.value),
+                ("LEFT_KNEE",      lm_enum.LEFT_KNEE.value),
+                ("RIGHT_KNEE",     lm_enum.RIGHT_KNEE.value),
+                ("LEFT_ANKLE",     lm_enum.LEFT_ANKLE.value),
+                ("RIGHT_ANKLE",    lm_enum.RIGHT_ANKLE.value),
+            ):
+                points[name] = _get(idx)
+
+        except (AttributeError, IndexError, KeyError) as exc:
+            logger.warning("Erro ao extrair keypoints: %s", exc)
+            return {}
+
+        return points
+
+    # ------------------------------------------------------------------
+    # Visibilidade e ângulos
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_visible(point: Point3D, threshold: float = 0.5) -> bool:
+        return len(point) >= 3 and point[2] >= threshold
+
+    def _calculate_angles(
+        self, points: Dict[str, Point3D]
+    ) -> Dict[str, float]:
+        """Calcula ângulos articulares apenas para landmarks visíveis."""
+        angles: Dict[str, float] = {}
+        vis = self._is_visible
+
+        limbs = [
+            ("left_arm",   ("LEFT_SHOULDER",  "LEFT_ELBOW",  "LEFT_WRIST")),
+            ("right_arm",  ("RIGHT_SHOULDER", "RIGHT_ELBOW", "RIGHT_WRIST")),
+            ("left_knee",  ("LEFT_HIP",       "LEFT_KNEE",   "LEFT_ANKLE")),
+            ("right_knee", ("RIGHT_HIP",      "RIGHT_KNEE",  "RIGHT_ANKLE")),
+        ]
+
+        for angle_name, (a, b, c) in limbs:
+            if all(k in points for k in (a, b, c)) and all(vis(points[k]) for k in (a, b, c)):
+                angles[angle_name] = self.detector.calculate_angle(
+                    list(points[a][:2]),
+                    list(points[b][:2]),
+                    list(points[c][:2]),
+                )
+
+        return angles
+
+    # ------------------------------------------------------------------
+    # Avaliação de poses — lógica original preservada integralmente
+    # ------------------------------------------------------------------
+
+    def _evaluate_pose(
+        self,
+        pose_mode: str,
+        points: Dict[str, Point3D],
+        angles: Dict[str, float],
+        camera_width: int,
+    ) -> str:
+        angle_left      = angles.get("left_arm", 0)
+        angle_right     = angles.get("right_arm", 0)
+        angle_left_knee = angles.get("left_knee", 0)
+        angle_right_knee = angles.get("right_knee", 0)
+        vis = self._is_visible
+
+        if pose_mode == "double_biceps":
+            required = ("LEFT_ELBOW", "RIGHT_ELBOW", "LEFT_SHOULDER", "RIGHT_SHOULDER")
+            if all(k in points for k in required) and all(vis(points[k]) for k in required):
+                return self.detector.evaluate_double_biceps(
+                    angle_left, angle_right,
+                    points["LEFT_ELBOW"][1], points["RIGHT_ELBOW"][1],
+                    points["LEFT_SHOULDER"][1], points["RIGHT_SHOULDER"][1],
+                )
+            return "Nao foi possivel detectar os pontos necessarios"
+
+        elif pose_mode == "side_chest":
+            if not ("LEFT_SHOULDER" in points and "RIGHT_SHOULDER" in points
+                    and vis(points["LEFT_SHOULDER"]) and vis(points["RIGHT_SHOULDER"])):
+                return "Nao foi possivel detectar os ombros"
+
+            left_ok  = (angle_left  > 0 and all(k in points for k in ("LEFT_ELBOW",  "LEFT_WRIST"))
+                        and vis(points["LEFT_ELBOW"])  and vis(points["LEFT_WRIST"]))
+            right_ok = (angle_right > 0 and all(k in points for k in ("RIGHT_ELBOW", "RIGHT_WRIST"))
+                        and vis(points["RIGHT_ELBOW"]) and vis(points["RIGHT_WRIST"]))
+
+            if not left_ok and not right_ok:
+                return "Nao foi possivel detectar os bracos necessarios"
+
+            cam_cx = camera_width / 2
+            ls_x = points["LEFT_SHOULDER"][0]
+            rs_x = points["RIGHT_SHOULDER"][0]
+
+            def _score(angle: float, shoulder_x: float) -> float:
+                return max(0, 120 - angle) + max(0, camera_width - abs(shoulder_x - cam_cx)) * 0.1
+
+            left_score  = _score(angle_left,  ls_x) if left_ok  else 0.0
+            right_score = _score(angle_right, rs_x) if right_ok else 0.0
+
+            knee_visible = False
+            visible_knee_angle = 0.0
+
+            if left_score >= right_score and left_ok:
+                vis_arm = angle_left
+                vis_elbow_h   = points["LEFT_ELBOW"][1]
+                vis_shoulder_h = points["LEFT_SHOULDER"][1]
+                opp_arm = angle_right if right_ok else 0.0
+                if (angle_left_knee > 0
+                        and "LEFT_KNEE" in points and vis(points["LEFT_KNEE"])
+                        and vis(points.get("LEFT_HIP",  (0, 0, 0.0)))
+                        and vis(points.get("LEFT_ANKLE", (0, 0, 0.0)))):
+                    visible_knee_angle = angle_left_knee
+                    knee_visible = True
+            elif right_ok:
+                vis_arm = angle_right
+                vis_elbow_h    = points["RIGHT_ELBOW"][1]
+                vis_shoulder_h = points["RIGHT_SHOULDER"][1]
+                opp_arm = angle_left if left_ok else 0.0
+                if (angle_right_knee > 0
+                        and "RIGHT_KNEE" in points and vis(points["RIGHT_KNEE"])
+                        and vis(points.get("RIGHT_HIP",  (0, 0, 0.0)))
+                        and vis(points.get("RIGHT_ANKLE", (0, 0, 0.0)))):
+                    visible_knee_angle = angle_right_knee
+                    knee_visible = True
+            else:
+                return "Nao foi possivel detectar os bracos necessarios"
+
+            hip_rot = 0
+            if ("LEFT_HIP" in points and "RIGHT_HIP" in points
+                    and vis(points["LEFT_HIP"]) and vis(points["RIGHT_HIP"])):
+                hip_rot = abs(points["LEFT_HIP"][0] - points["RIGHT_HIP"][0])
+
+            return self.detector.evaluate_side_chest(
+                vis_arm, vis_elbow_h, vis_shoulder_h,
+                hip_rot, visible_knee_angle, opp_arm, knee_visible,
+            )
+
+        elif pose_mode == "side_triceps":
+            if not ("LEFT_SHOULDER" in points and "RIGHT_SHOULDER" in points
+                    and vis(points["LEFT_SHOULDER"]) and vis(points["RIGHT_SHOULDER"])):
+                return "Nao foi possivel detectar os ombros"
+
+            left_ok  = (angle_left  > 0 and all(k in points for k in ("LEFT_ELBOW",  "LEFT_WRIST"))
+                        and vis(points["LEFT_ELBOW"])  and vis(points["LEFT_WRIST"]))
+            right_ok = (angle_right > 0 and all(k in points for k in ("RIGHT_ELBOW", "RIGHT_WRIST"))
+                        and vis(points["RIGHT_ELBOW"]) and vis(points["RIGHT_WRIST"]))
+
+            if not left_ok and not right_ok:
+                return "Nao foi possivel detectar os bracos necessarios"
+
+            cam_cx = camera_width / 2
+
+            def _tri_score(angle: float, shoulder_x: float) -> float:
+                return angle + abs(shoulder_x - cam_cx) * 0.1
+
+            left_score  = _tri_score(angle_left,  points["LEFT_SHOULDER"][0])  if left_ok  else 0.0
+            right_score = _tri_score(angle_right, points["RIGHT_SHOULDER"][0]) if right_ok else 0.0
+
+            knee_visible = False
+            front_knee_angle = 0.0
+
+            if left_score >= right_score and left_ok:
+                post_angle = angle_left
+                post_elbow_h    = points["LEFT_ELBOW"][1]
+                post_shoulder_h = points["LEFT_SHOULDER"][1]
+                post_wrist_h    = points["LEFT_WRIST"][1]
+                front_arm = angle_right if right_ok else 0.0
+                if (angle_right_knee > 0
+                        and "RIGHT_KNEE" in points and vis(points["RIGHT_KNEE"])
+                        and vis(points.get("RIGHT_HIP",  (0, 0, 0.0)))
+                        and vis(points.get("RIGHT_ANKLE", (0, 0, 0.0)))):
+                    front_knee_angle = angle_right_knee
+                    knee_visible = True
+            elif right_ok:
+                post_angle = angle_right
+                post_elbow_h    = points["RIGHT_ELBOW"][1]
+                post_shoulder_h = points["RIGHT_SHOULDER"][1]
+                post_wrist_h    = points["RIGHT_WRIST"][1]
+                front_arm = angle_left if left_ok else 0.0
+                if (angle_left_knee > 0
+                        and "LEFT_KNEE" in points and vis(points["LEFT_KNEE"])
+                        and vis(points.get("LEFT_HIP",  (0, 0, 0.0)))
+                        and vis(points.get("LEFT_ANKLE", (0, 0, 0.0)))):
+                    front_knee_angle = angle_left_knee
+                    knee_visible = True
+            else:
+                return "Nao foi possivel detectar o braco posterior necessario"
+
+            hip_rot = 0
+            if ("LEFT_HIP" in points and "RIGHT_HIP" in points
+                    and vis(points["LEFT_HIP"]) and vis(points["RIGHT_HIP"])):
+                hip_rot = abs(points["LEFT_HIP"][0] - points["RIGHT_HIP"][0])
+
+            return self.detector.evaluate_side_triceps(
+                post_angle, post_elbow_h, post_shoulder_h,
+                post_wrist_h, hip_rot, front_knee_angle, front_arm, knee_visible,
+            )
+
+        elif pose_mode == "most_muscular":
+            required = ("LEFT_ELBOW", "RIGHT_ELBOW", "LEFT_SHOULDER",
+                        "RIGHT_SHOULDER", "LEFT_WRIST", "RIGHT_WRIST")
+            if all(k in points for k in required):
+                shoulder_w = abs(points["RIGHT_SHOULDER"][0] - points["LEFT_SHOULDER"][0])
+                torso_align = 0
+                if all(k in points for k in ("LEFT_SHOULDER", "LEFT_HIP", "RIGHT_SHOULDER", "RIGHT_HIP")):
+                    torso_align = abs(
+                        (points["LEFT_SHOULDER"][1] - points["LEFT_HIP"][1])
+                        - (points["RIGHT_SHOULDER"][1] - points["RIGHT_HIP"][1])
+                    )
+                return self.detector.evaluate_most_muscular(
+                    angle_left, angle_right,
+                    points["LEFT_ELBOW"][1], points["RIGHT_ELBOW"][1],
+                    points["LEFT_SHOULDER"][1], points["RIGHT_SHOULDER"][1],
+                    shoulder_w,
+                    angle_left_knee  if angle_left_knee  > 0 else 175,
+                    angle_right_knee if angle_right_knee > 0 else 175,
+                    torso_align,
+                    points["LEFT_WRIST"][0], points["RIGHT_WRIST"][0],
+                    points["LEFT_SHOULDER"][0], points["RIGHT_SHOULDER"][0],
+                )
+            return "Nao foi possivel detectar os pontos necessarios"
+
+        elif pose_mode == "enquadramento":
+            if "LEFT_SHOULDER" in points and "RIGHT_SHOULDER" in points:
+                return self.detector.evaluate_centered(
+                    points["LEFT_SHOULDER"][0],
+                    points["RIGHT_SHOULDER"][0],
+                    camera_width,
+                )
+            return "Nao foi possivel detectar os pontos necessarios"
+
+        return f"Modo '{pose_mode}' ainda nao implementado"
