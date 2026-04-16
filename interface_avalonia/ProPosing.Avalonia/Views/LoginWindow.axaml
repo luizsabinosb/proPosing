@@ -1,0 +1,141 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:ProPosing.Avalonia.ViewModels"
+        x:Class="ProPosing.Avalonia.Views.LoginWindow"
+        x:DataType="vm:LoginViewModel"
+        Title="proPosing"
+        Width="420"
+        Height="600"
+        CanResize="False"
+        Background="#0A0A0A"
+        WindowStartupLocation="CenterScreen"
+        KeyDown="OnKeyDown">
+
+  <Grid RowDefinitions="52,*,36">
+
+    <!-- ── Top branding bar ─────────────────────────────────────── -->
+    <Border Grid.Row="0" Background="#0A0A0A">
+      <Border BorderBrush="#33EF4444" BorderThickness="0,0,0,1">
+        <TextBlock Text="Powered by Feral Tech Supplies"
+                   FontSize="11"
+                   FontStyle="Italic"
+                   Foreground="#33FFFFFF"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center" />
+      </Border>
+    </Border>
+
+    <!-- ── Login form ───────────────────────────────────────────── -->
+    <StackPanel Grid.Row="1"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Center"
+                Width="348"
+                Spacing="0">
+
+      <!-- Heading -->
+      <StackPanel HorizontalAlignment="Center" Spacing="2" Margin="0,0,0,28">
+        <TextBlock Text="BEM-VINDO AO"
+                   FontSize="11"
+                   FontWeight="Bold"
+                   Foreground="#55FFFFFF"
+                   HorizontalAlignment="Center"
+                   LetterSpacing="4" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="0">
+          <TextBlock Text="pro"
+                     FontFamily="Ethnocentric"
+                     FontSize="30"
+                     FontWeight="Bold"
+                     FontStyle="Italic"
+                     Foreground="White" />
+          <TextBlock Text="Posing"
+                     FontFamily="Ethnocentric"
+                     FontSize="30"
+                     FontWeight="Bold"
+                     Foreground="#EF4444" />
+        </StackPanel>
+        <TextBlock Text="Entre com suas credenciais para continuar"
+                   FontSize="12"
+                   Foreground="#44FFFFFF"
+                   HorizontalAlignment="Center"
+                   Margin="0,6,0,0" />
+      </StackPanel>
+
+      <!-- Card -->
+      <Border CornerRadius="14"
+              Background="#111111"
+              BorderBrush="#2AEF4444"
+              BorderThickness="1"
+              ClipToBounds="True">
+        <Grid RowDefinitions="3,Auto">
+
+          <!-- Red accent bar at top -->
+          <Border Grid.Row="0" Background="#EF4444" />
+
+          <!-- Form content -->
+          <StackPanel Grid.Row="1" Margin="26,22,26,26" Spacing="16">
+
+            <!-- Email field -->
+            <StackPanel Spacing="7">
+              <TextBlock Text="EMAIL"
+                         FontSize="10"
+                         FontWeight="Bold"
+                         Foreground="#66EF4444"
+                         LetterSpacing="2" />
+              <TextBox Classes="loginField"
+                       Name="EmailBox"
+                       Text="{Binding Email}"
+                       Watermark="seu@email.com" />
+            </StackPanel>
+
+            <!-- Password field -->
+            <StackPanel Spacing="7">
+              <TextBlock Text="SENHA"
+                         FontSize="10"
+                         FontWeight="Bold"
+                         Foreground="#66EF4444"
+                         LetterSpacing="2" />
+              <TextBox Classes="loginField"
+                       Name="PasswordBox"
+                       Text="{Binding Password}"
+                       PasswordChar="•"
+                       Watermark="••••••••" />
+            </StackPanel>
+
+            <!-- Error message -->
+            <Border Classes="hint"
+                    IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                    Margin="0">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Ellipse Width="6" Height="6" Fill="#EF4444" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding ErrorMessage}"
+                           FontSize="12"
+                           Foreground="#EF4444"
+                           VerticalAlignment="Center" />
+              </StackPanel>
+            </Border>
+
+            <!-- Thin divider -->
+            <Border Height="1" Background="#14FFFFFF" Margin="0,2,0,2" />
+
+            <!-- Login button -->
+            <Button Classes="loginBtn"
+                    Content="{Binding LoginButtonText}"
+                    Command="{Binding LoginCommand}"
+                    HorizontalAlignment="Stretch" />
+
+          </StackPanel>
+        </Grid>
+      </Border>
+
+    </StackPanel>
+
+    <!-- ── Bottom footer ────────────────────────────────────────── -->
+    <TextBlock Grid.Row="2"
+               Text="© 2026 Feral Tech Supplies· All rights reserved."
+               FontSize="10"
+               Foreground="#22FFFFFF"
+               HorizontalAlignment="Center"
+               VerticalAlignment="Center" />
+
+  </Grid>
+</Window>

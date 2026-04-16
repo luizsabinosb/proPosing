@@ -7,6 +7,7 @@ public static class GeometryHelper
     // MediaPipe Pose landmark indices (0-32)
     public static class Idx
     {
+        public const int Nose          = 0;
         public const int LeftShoulder  = 11;
         public const int RightShoulder = 12;
         public const int LeftElbow     = 13;

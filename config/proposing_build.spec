@@ -4,6 +4,7 @@
 
 import sys
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_data_files
 
 # SPECPATH = diretório do .spec (config/) → parent = raiz do projeto
 PROJECT_ROOT = Path(SPECPATH).parent
@@ -13,6 +14,8 @@ added_data = [
     (str(PROJECT_ROOT / "ml" / "models"), "ml/models"),
     (str(PROJECT_ROOT / "ml" / "pose_info"), "ml/pose_info"),
     (str(PROJECT_ROOT / "ml" / "data"), "ml/data"),
+    # Modelos e dados do MediaPipe (necessários para execução sem internet)
+    *collect_data_files("mediapipe"),
 ]
 
 # Oculta imports necessários para MediaPipe, OpenCV, etc

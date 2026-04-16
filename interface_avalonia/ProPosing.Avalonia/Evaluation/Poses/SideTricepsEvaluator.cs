@@ -3,22 +3,41 @@ using static ProPosing.Avalonia.Evaluation.GeometryHelper;
 
 namespace ProPosing.Avalonia.Evaluation.Poses;
 
+/// <summary>
+/// Side Triceps: body in ~85–90° side profile, both arms pulled DOWN beside the torso,
+/// posterior arm fully extended with wrist at hip/thigh level to showcase the triceps.
+/// </summary>
 public sealed class SideTricepsEvaluator : IPoseEvaluator
 {
-    // Thresholds from pose_evaluator.py
-    private const double MinAngle = 120;
-    private const double MaxAngle = 180;
+    private readonly SideTricepsThresholds _t;
+
+    public SideTricepsEvaluator(SideTricepsThresholds? thresholds = null)
+        => _t = thresholds ?? new SideTricepsThresholds();
 
     public string PoseMode => "side_triceps";
 
     public PoseFeedback Evaluate(IReadOnlyList<LandmarkPoint> lms)
     {
-        var ls = lms[Idx.LeftShoulder];  var rs = lms[Idx.RightShoulder];
-        var le = lms[Idx.LeftElbow];     var re = lms[Idx.RightElbow];
-        var lw = lms[Idx.LeftWrist];     var rw = lms[Idx.RightWrist];
-        var lk = lms[Idx.LeftKnee];      var rk = lms[Idx.RightKnee];
-        var lh = lms[Idx.LeftHip];       var rh = lms[Idx.RightHip];
-        var la = lms[Idx.LeftAnkle];     var ra = lms[Idx.RightAnkle];
+        var nose = lms[Idx.Nose];
+        var ls   = lms[Idx.LeftShoulder];  var rs = lms[Idx.RightShoulder];
+        var le   = lms[Idx.LeftElbow];     var re = lms[Idx.RightElbow];
+        var lw   = lms[Idx.LeftWrist];     var rw = lms[Idx.RightWrist];
+        var lk   = lms[Idx.LeftKnee];      var rk = lms[Idx.RightKnee];
+        var lh   = lms[Idx.LeftHip];       var rh = lms[Idx.RightHip];
+        var la   = lms[Idx.LeftAnkle];     var ra = lms[Idx.RightAnkle];
+
+        // ── 1. Perfil lateral obrigatório ──────────────────────────────
+        // Nariz claramente visível → usuário está de frente para a câmera
+        if (IsVisible(nose, _t.NoseMaxVisibility))
+            return new PoseFeedback("incorrect", "Vire completamente de lado para a câmera", []);
+
+        // Quadris visíveis e largos → tronco ainda de frente
+        if (IsVisible(lh) && IsVisible(rh))
+        {
+            double hipWidth = Math.Abs(lh.X - rh.X);
+            if (hipWidth > _t.HipWidthMax)
+                return new PoseFeedback("incorrect", "Gire o tronco completamente de lado (~85–90°)", []);
+        }
 
         bool leftOk  = IsVisible(ls) && IsVisible(le) && IsVisible(lw);
         bool rightOk = IsVisible(rs) && IsVisible(re) && IsVisible(rw);
@@ -26,49 +45,48 @@ public sealed class SideTricepsEvaluator : IPoseEvaluator
         if (!leftOk && !rightOk)
             return new PoseFeedback("incorrect", "Braços não detectados — verifique o enquadramento", []);
 
-        // Posterior arm = the more extended (larger angle) visible arm
+        // ── 2. Braço posterior (mais estendido = mostrando tríceps) ───
         double leftAngle  = leftOk  ? Angle(ls, le, lw) : double.MinValue;
         double rightAngle = rightOk ? Angle(rs, re, rw) : double.MinValue;
 
-        double postAngle;
-        LandmarkPoint postElbow, postShoulder;
-
-        if (leftAngle >= rightAngle && leftOk)
-        { postAngle = leftAngle; postElbow = le; postShoulder = ls; }
-        else
-        { postAngle = rightAngle; postElbow = re; postShoulder = rs; }
+        bool useLeft = leftAngle >= rightAngle && leftOk;
+        var (postShoulder, postElbow, postWrist) = useLeft
+            ? (ls, le, lw) : (rs, re, rw);
+        double postAngle = useLeft ? leftAngle : rightAngle;
 
         var errors = new List<string>();
 
-        // Primary: posterior arm must be extended 120–180°
-        if (postAngle < MinAngle)
-            errors.Add($"Braço posterior deve estar estendido ({MinAngle}–{MaxAngle}°) (atual: {postAngle:F0}°)");
+        // ── 3. Braço deve estar bem estendido (tríceps alongado) ──────
+        if (postAngle < _t.ArmMinAngle)
+            errors.Add($"Estenda mais o braço — tríceps deve estar quase reto (atual: {postAngle:F0}°)");
 
-        // Elbow must not be excessively above shoulder
-        if (postElbow.Y < postShoulder.Y - 0.08)
-            errors.Add("Cotovelo posterior muito acima do ombro — abaixe para mostrar o tríceps corretamente");
+        // ── 4. Braço apontando para BAIXO — cotovelo abaixo do ombro ──
+        // Y maior = mais baixo na imagem; cotovelo deve estar abaixo do ombro
+        if (postElbow.Y < postShoulder.Y + _t.ElbowBelowShoulderMin)
+            errors.Add("Abaixe o braço — cotovelo deve estar abaixo do ombro, apontando para baixo");
 
-        // Hip rotation: side view → hips should appear narrow
-        if (IsVisible(lh) && IsVisible(rh))
+        // ── 5. Pulso na altura do quadril (braço puxado para baixo) ───
+        if (IsVisible(lh) || IsVisible(rh))
         {
-            double hipWidth = Math.Abs(lh.X - rh.X);
-            if (hipWidth > 0.20)
-                errors.Add("Gire o tronco para o lado (~85–90°) para melhor visualização do tríceps");
+            double hipY = IsVisible(lh) ? lh.Y : rh.Y;
+            if (postWrist.Y < hipY - _t.WristHipYTolerance)
+                errors.Add("Puxe o braço para baixo — pulso deve estar na altura do quadril");
         }
 
-        // Front knee: should be extended ~170–180°
+        // ── 6. Cotovelo não deve estar acima do ombro ─────────────────
+        if (postElbow.Y < postShoulder.Y - _t.ElbowAboveShoulderMax)
+            errors.Add("Cotovelo muito acima do ombro — abaixe o braço completamente");
+
+        // ── 7. Joelho da perna frontal estendido ──────────────────────
         bool kneeLeftOk  = IsVisible(lk) && IsVisible(lh) && IsVisible(la);
         bool kneeRightOk = IsVisible(rk) && IsVisible(rh) && IsVisible(ra);
         if (kneeLeftOk || kneeRightOk)
         {
-            double kneeAngle = kneeLeftOk
-                ? Angle(lh, lk, la)
-                : Angle(rh, rk, ra);
-            if (kneeAngle < 170)
-                errors.Add($"Joelho da perna frontal deve estar estendido (~180°) (atual: {kneeAngle:F0}°)");
+            double kneeAngle = kneeLeftOk ? Angle(lh, lk, la) : Angle(rh, rk, ra);
+            if (kneeAngle < _t.KneeMinAngle)
+                errors.Add($"Estenda a perna frontal (~180°) (atual: {kneeAngle:F0}°)");
         }
 
-        return PoseFeedback.FromErrors(errors,
-            "Excelente side triceps! Tríceps bem estendido e destacado.");
+        return PoseFeedback.FromErrors(errors, "Excelente side triceps! Tríceps bem estendido e destacado.");
     }
 }

@@ -23,7 +23,7 @@ public sealed class PoseModeMatchToBrushConverter : IValueConverter
         return role switch
         {
             "background" => isSelected ? Brush.Parse("#2EEF4444") : Brush.Parse("#161616"),
-            "border"     => isSelected ? Brush.Parse("#CCEF4444") : Brush.Parse("#2A2A2A"),
+            "border"     => Brush.Parse("#2A2A2A"),
             _ => Brush.Parse("#161616"),
         };
     }

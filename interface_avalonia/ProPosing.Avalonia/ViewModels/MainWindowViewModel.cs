@@ -26,6 +26,9 @@ public partial class MainWindowViewModel : ObservableObject
     private string _cameraError = string.Empty;
 
     [ObservableProperty]
+    private string _cameraStatusMessage = string.Empty;
+
+    [ObservableProperty]
     private string _selectedPoseMode = "enquadramento";
 
     [ObservableProperty]
@@ -52,6 +55,9 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private Bitmap? _referenceImage;
 
+    [ObservableProperty]
+    private double _referenceImageOpacity = 1.0;
+
     public bool HasReferenceImage => ReferenceImage is not null;
 
     [ObservableProperty]
@@ -67,15 +73,21 @@ public partial class MainWindowViewModel : ObservableObject
 
         Poses = new ObservableCollection<PoseOption>
         {
-            new() { Number = 1, Mode = "enquadramento", Label = "ENQUADRAMENTO" },
-            new() { Number = 2, Mode = "double_biceps", Label = "DUPLO BICEPS" },
-            new() { Number = 3, Mode = "side_chest", Label = "SIDE CHEST" },
-            new() { Number = 4, Mode = "side_triceps", Label = "SIDE TRICEPS" },
-            new() { Number = 5, Mode = "most_muscular", Label = "MOST MUSCULAR" },
+            new() { Number = 0, Mode = "enquadramento",    Label = "ENQUADRAMENTO"   },
+            new() { Number = 1, Mode = "double_biceps",    Label = "DUPLO BÍCEPS"    },
+            new() { Number = 2, Mode = "side_chest",       Label = "SIDE CHEST"      },
+            new() { Number = 3, Mode = "side_triceps",     Label = "SIDE TRÍCEPS"    },
+            new() { Number = 4, Mode = "most_muscular",    Label = "MOST MUSCULAR"   },
+            new() { Number = 5, Mode = "quarter_turn_side",Label = "QUARTER TURN"    },
+            new() { Number = 6, Mode = "front_lat_spread", Label = "FRONT LAT SPREAD"},
+            new() { Number = 7, Mode = "back_lat_spread",  Label = "BACK LAT SPREAD" },
+            new() { Number = 8, Mode = "abs_and_thighs",   Label = "ABS AND THIGHS"  },
+            new() { Number = 9, Mode = "teacup",           Label = "TEA CUP"         },
         };
 
-        _cameraPipelineService.FrameReady += OnFrameReady;
-        _cameraPipelineService.Error += OnPipelineError;
+        _cameraPipelineService.FrameReady      += OnFrameReady;
+        _cameraPipelineService.Error           += OnPipelineError;
+        _cameraPipelineService.StatusUpdate    += OnPipelineStatus;
     }
 
     public ObservableCollection<PoseOption> Poses { get; }
@@ -83,6 +95,7 @@ public partial class MainWindowViewModel : ObservableObject
     public bool HasFrame => CameraFrame is not null;
     public bool ShowPlaceholder => !HasFrame;
     public bool HasCameraError => !string.IsNullOrWhiteSpace(CameraError);
+    public bool HasCameraStatusMessage => !string.IsNullOrWhiteSpace(CameraStatusMessage);
     public IBrush FpsIndicatorBrush => Fps >= 28 ? Brush.Parse("#10B981") : Brush.Parse("#F59E0B");
 
     [RelayCommand]
@@ -125,13 +138,13 @@ public partial class MainWindowViewModel : ObservableObject
 
     public async Task HandleKeyAsync(global::Avalonia.Input.Key key)
     {
-        if (key is >= global::Avalonia.Input.Key.D1 and <= global::Avalonia.Input.Key.D5)
+        // Keys 0–9 → poses 0–9
+        if (key is >= global::Avalonia.Input.Key.D0 and <= global::Avalonia.Input.Key.D9)
         {
             await SelectPoseByNumberAsync((int)key - (int)global::Avalonia.Input.Key.D0);
             return;
         }
-
-        if (key is >= global::Avalonia.Input.Key.NumPad1 and <= global::Avalonia.Input.Key.NumPad5)
+        if (key is >= global::Avalonia.Input.Key.NumPad0 and <= global::Avalonia.Input.Key.NumPad9)
         {
             await SelectPoseByNumberAsync((int)key - (int)global::Avalonia.Input.Key.NumPad0);
         }
@@ -139,10 +152,27 @@ public partial class MainWindowViewModel : ObservableObject
 
     private void OnPipelineError(string message)
     {
-        Dispatcher.UIThread.Post(() => CameraError = message);
+        Dispatcher.UIThread.Post(() =>
+        {
+            CameraStatusMessage = string.Empty;
+            CameraError = message;
+            IsRunning   = false;
+        });
+    }
+
+    private void OnPipelineStatus(string message)
+    {
+        Dispatcher.UIThread.Post(() => CameraStatusMessage = message);
     }
 
     public bool HasHints => Hints.Count > 0;
+
+    /// <summary>
+    /// True whenever there is a standalone pose quality message to display.
+    /// This covers both the success message (from FromErrors with 0 errors)
+    /// and direct early-return messages (evaluator guard clauses that bypass FromErrors).
+    /// </summary>
+    public bool HasPoseQualityMessage => !string.IsNullOrEmpty(PoseQuality);
 
     public string SelectedPoseLabel =>
         Poses.FirstOrDefault(p => p.Mode == SelectedPoseMode)?.Label ?? SelectedPoseMode.ToUpperInvariant();
@@ -159,6 +189,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             try
             {
+                CameraStatusMessage = string.Empty;
                 CameraFrame    = CreateBitmap(update.BgraBuffer, update.Width, update.Height);
                 Fps            = update.Fps;
                 Landmarks      = update.Landmarks;
@@ -171,6 +202,7 @@ public partial class MainWindowViewModel : ObservableObject
                 PoseQuality = fb?.Message  ?? "Aguardando detecção...";
                 Hints       = fb?.Hints    ?? [];
                 OnPropertyChanged(nameof(HasHints));
+                OnPropertyChanged(nameof(HasPoseQualityMessage));
             }
             finally
             {
@@ -202,6 +234,11 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(HasCameraError));
     }
 
+    partial void OnCameraStatusMessageChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasCameraStatusMessage));
+    }
+
     partial void OnFpsChanged(int value)
     {
         OnPropertyChanged(nameof(FpsIndicatorBrush));
@@ -209,9 +246,22 @@ public partial class MainWindowViewModel : ObservableObject
 
     partial void OnSelectedPoseModeChanged(string value)
     {
-        ReferenceImage = LoadReferenceImage(value);
+        _ = TransitionReferenceImageAsync(value);
+    }
+
+    private async Task TransitionReferenceImageAsync(string poseMode)
+    {
+        // fade out
+        ReferenceImageOpacity = 0.0;
+        await Task.Delay(200);
+
+        // troca conteúdo enquanto está invisível
+        ReferenceImage = LoadReferenceImage(poseMode);
         OnPropertyChanged(nameof(HasReferenceImage));
         OnPropertyChanged(nameof(SelectedPoseLabel));
+
+        // fade in
+        ReferenceImageOpacity = 1.0;
     }
 
     partial void OnReferenceImageChanged(Bitmap? value)
@@ -221,10 +271,15 @@ public partial class MainWindowViewModel : ObservableObject
 
     private static readonly Dictionary<string, string> _referenceImageFiles = new()
     {
-        ["double_biceps"]  = "doubleBiceps.jpg",
-        ["side_chest"]     = "sideChest.jpg",
-        ["side_triceps"]   = "sideTriceps.png",
-        ["most_muscular"]  = "mostMuscular.png",
+        ["double_biceps"]     = "doubleBiceps.jpg",
+        ["side_chest"]        = "sideChest.jpg",
+        ["side_triceps"]      = "sideTriceps.png",
+        ["most_muscular"]     = "mostMuscular.png",
+        ["quarter_turn_side"] = "quarterTurn.jpg",
+        ["front_lat_spread"]  = "frontLatSpread.png",
+        ["back_lat_spread"]   = "backLatSpread.jpg",
+        ["abs_and_thighs"]    = "absAndThighs.png",
+        ["teacup"]            = "teaCup.png",
     };
 
     private static Bitmap? LoadReferenceImage(string poseMode)

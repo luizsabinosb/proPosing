@@ -4,6 +4,17 @@ MediaPipe Sidecar — local pose landmark detector.
 Protocol: binary frames in via stdin, JSON landmarks out via stdout.
 """
 import sys
+import ssl
+import os
+
+# Fix macOS SSL certificate verification issue — mediapipe needs SSL to locate
+# its model files. Use certifi if available, otherwise disable verification.
+try:
+    import certifi
+    os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+    os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
+except ImportError:
+    ssl._create_default_https_context = ssl._create_unverified_context
 
 # Print before any heavy import so C# can see we at least started.
 print("LOADING", flush=True)
@@ -24,7 +35,7 @@ try:
     mp_pose = mp.solutions.pose
     _pose = mp_pose.Pose(
         static_image_mode=False,
-        model_complexity=1,
+        model_complexity=0,        # 0 = leve/rápido, 1 = médio, 2 = pesado
         smooth_landmarks=True,
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5,

@@ -14,9 +14,7 @@ public sealed record PoseFeedback(
     {
         if (errors.Count == 0)
             return new("correct", correctMessage, []);
-        if (errors.Count == 1)
-            return new("adjustment_needed", errors[0], []);
-        // First error is the main message; remaining are secondary corrections.
-        return new("incorrect", errors[0], errors.Skip(1).ToList());
+        // All errors go to hints; message stays empty so all items render uniformly.
+        return new(errors.Count == 1 ? "adjustment_needed" : "incorrect", string.Empty, errors.ToList());
     }
 }

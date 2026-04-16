@@ -17,8 +17,14 @@ public sealed class CameraPipelineService
     private IReadOnlyList<LandmarkPoint> _lastLandmarks = [];
     private PoseFeedback _lastFeedback = PoseFeedback.NoDetection;
 
+    /// <summary>Fired when the pipeline emits a rendered frame.</summary>
     public event Action<PipelineUpdate>? FrameReady;
+
+    /// <summary>Fired on unrecoverable errors (camera denied, not found, etc.).</summary>
     public event Action<string>? Error;
+
+    /// <summary>Fired with transient status messages while waiting for permission.</summary>
+    public event Action<string>? StatusUpdate;
 
     public CameraPipelineService(AppConfig config, MediaPipeSidecar sidecar, PoseEvaluatorRegistry evaluatorRegistry)
     {
@@ -29,18 +35,11 @@ public sealed class CameraPipelineService
 
     public bool IsRunning => _loopTask is { IsCompleted: false };
 
-    public void SetPoseMode(string poseMode)
-    {
-        _poseMode = poseMode;
-    }
+    public void SetPoseMode(string poseMode) => _poseMode = poseMode;
 
     public Task StartAsync()
     {
-        if (IsRunning)
-        {
-            return Task.CompletedTask;
-        }
-
+        if (IsRunning) return Task.CompletedTask;
         _cts = new CancellationTokenSource();
         _loopTask = Task.Run(() => CaptureLoopAsync(_cts.Token), _cts.Token);
         return Task.CompletedTask;
@@ -48,41 +47,27 @@ public sealed class CameraPipelineService
 
     public async Task StopAsync()
     {
-        if (_cts is null)
-        {
-            return;
-        }
-
+        if (_cts is null) return;
         _cts.Cancel();
         if (_loopTask is not null)
         {
-            try
-            {
-                await _loopTask;
-            }
-            catch
-            {
-                // Ignorado durante encerramento.
-            }
+            try { await _loopTask; }
+            catch { /* ignored on shutdown */ }
         }
-
         _cts.Dispose();
         _cts = null;
         _loopTask = null;
     }
 
-    private async Task CaptureLoopAsync(CancellationToken cancellationToken)
-    {
-        using var capture = TryOpenCamera();
-        if (!capture.IsOpened())
-        {
-            Error?.Invoke(
-                "Não foi possível abrir a câmera. " +
-                "No macOS, permita câmera para o aplicativo (ou Terminal, se rodar via dotnet run) e feche apps que já estejam usando a webcam.");
-            return;
-        }
+    // ── Main capture loop ──────────────────────────────────────────────────────
 
-        capture.Set(VideoCaptureProperties.FrameWidth, 1280);
+    private async Task CaptureLoopAsync(CancellationToken ct)
+    {
+        // Wait for camera + permission before entering the frame loop.
+        using var capture = await OpenCameraWithPermissionWaitAsync(ct);
+        if (capture is null) return; // error already fired
+
+        capture.Set(VideoCaptureProperties.FrameWidth,  1280);
         capture.Set(VideoCaptureProperties.FrameHeight, 720);
 
         using var frame = new Mat();
@@ -92,14 +77,13 @@ public sealed class CameraPipelineService
         var fpsStart = DateTime.UtcNow;
         var tick = 0;
 
-        while (!cancellationToken.IsCancellationRequested)
+        while (!ct.IsCancellationRequested)
         {
             var startedAt = DateTime.UtcNow;
 
             if (!capture.Read(frame) || frame.Empty())
             {
-                Error?.Invoke("Falha ao capturar frame da câmera.");
-                await Task.Delay(60, cancellationToken);
+                await Task.Delay(60, ct);
                 continue;
             }
 
@@ -113,19 +97,17 @@ public sealed class CameraPipelineService
                 fpsStart = DateTime.UtcNow;
             }
 
-            // Fire inference every N frames without blocking the display loop.
-            // Uses a half-resolution copy so MediaPipe processes 4× fewer pixels.
             if (tick % Math.Max(1, _config.InferenceStride) == 0 && !_inferenceInFlight)
             {
                 var small = new Mat();
                 Cv2.Resize(frame, small, new OpenCvSharp.Size(frame.Cols / 2, frame.Rows / 2));
-                _ = RunInferenceAsync(small, cancellationToken);
+                _ = RunInferenceAsync(small, ct);
             }
 
             using var bgra = new Mat();
             Cv2.CvtColor(frame, bgra, ColorConversionCodes.BGR2BGRA);
             var buffer = new byte[bgra.Rows * bgra.Cols * bgra.ElemSize()];
-            System.Runtime.InteropServices.Marshal.Copy(bgra.Data, buffer, 0, buffer.Length);
+            Marshal.Copy(bgra.Data, buffer, 0, buffer.Length);
 
             FrameReady?.Invoke(new PipelineUpdate
             {
@@ -139,57 +121,94 @@ public sealed class CameraPipelineService
             });
 
             var elapsedMs = (int)(DateTime.UtcNow - startedAt).TotalMilliseconds;
-            var sleepMs = frameIntervalMs - elapsedMs;
-            if (sleepMs > 0)
-            {
-                await Task.Delay(sleepMs, cancellationToken);
-            }
+            var sleepMs   = frameIntervalMs - elapsedMs;
+            if (sleepMs > 0) await Task.Delay(sleepMs, ct);
         }
     }
 
-    private VideoCapture TryOpenCamera()
+    // ── Camera open + permission wait ──────────────────────────────────────────
+
+    /// <summary>
+    /// Opens the camera and waits up to 45 s for the first valid frame.
+    ///
+    /// macOS quirk: when the user grants camera permission for the first time,
+    /// AVFoundation does NOT activate the existing VideoCapture instance.
+    /// The capture must be CLOSED and RE-OPENED to gain access.
+    /// We handle this by running short polling cycles (~6 s each) and
+    /// re-creating the VideoCapture on every cycle, so the moment permission
+    /// is granted the next open succeeds immediately.
+    /// </summary>
+    private async Task<VideoCapture?> OpenCameraWithPermissionWaitAsync(CancellationToken ct)
     {
-        // Em macOS, AVFoundation costuma ser o backend mais estável para webcam.
+        const int totalTimeoutSeconds = 45;
+        const int cycleSeconds        = 6;
+        const int pollIntervalMs      = 300;
+
+        var deadline = DateTime.UtcNow.AddSeconds(totalTimeoutSeconds);
+
+        StatusUpdate?.Invoke("Aguardando permissão de câmera...\nResponda ao diálogo do sistema para continuar.");
+
+        while (!ct.IsCancellationRequested)
+        {
+            // Re-open on every cycle — required after macOS first-time permission grant.
+            var cap = OpenCameraRaw();
+
+            if (!cap.IsOpened())
+            {
+                cap.Dispose();
+                Error?.Invoke(
+                    "Nenhuma câmera detectada.\n" +
+                    "Verifique se a webcam está conectada e tente novamente.");
+                return null;
+            }
+
+            // Poll this instance for up to cycleSeconds.
+            var cycleDeadline = DateTime.UtcNow.AddSeconds(cycleSeconds);
+            while (!ct.IsCancellationRequested && DateTime.UtcNow < cycleDeadline)
+            {
+                using var testFrame = new Mat();
+                if (cap.Read(testFrame) && !testFrame.Empty())
+                {
+                    StatusUpdate?.Invoke(string.Empty);
+                    return cap;
+                }
+                await Task.Delay(pollIntervalMs, ct);
+            }
+
+            // No frame this cycle — dispose and try again with a fresh capture.
+            cap.Dispose();
+
+            if (DateTime.UtcNow >= deadline)
+            {
+                Error?.Invoke(
+                    "Acesso à câmera negado.\n\n" +
+                    "Para liberar o acesso:\n" +
+                    "Ajustes do Sistema → Privacidade e Segurança → Câmera\n" +
+                    "Ative o acesso para ProPosing (ou Terminal) e reinicie o app.");
+                return null;
+            }
+
+            await Task.Delay(200, ct);
+        }
+
+        return null;
+    }
+
+    /// <summary>Opens the camera device without testing for frames.</summary>
+    private VideoCapture OpenCameraRaw()
+    {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
+            // AVFoundation (1200) is the most stable backend for macOS webcams.
             var avf = new VideoCapture(_config.CameraIndex, (VideoCaptureAPIs)1200);
-            if (avf.IsOpened())
-            {
-                // Valida leitura real — macOS pode abrir mas negar frame se permissão negada.
-                using var testFrame = new Mat();
-                if (avf.Read(testFrame) && !testFrame.Empty())
-                {
-                    return avf;
-                }
-                avf.Dispose();
-                // Conseguiu abrir mas não leu: quase certamente permissão negada no macOS.
-                Error?.Invoke(
-                    "Câmera aberta, mas sem frames. Acesse Ajustes do Sistema → Privacidade e Segurança → Câmera " +
-                    "e permita o acesso para o Terminal (ou para o app). Em seguida, reinicie.");
-                return new VideoCapture();
-            }
+            if (avf.IsOpened()) return avf;
             avf.Dispose();
         }
 
-        var any = new VideoCapture(_config.CameraIndex, VideoCaptureAPIs.ANY);
-        if (any.IsOpened())
-        {
-            using var testFrame = new Mat();
-            if (any.Read(testFrame) && !testFrame.Empty())
-            {
-                return any;
-            }
-            any.Dispose();
-            Error?.Invoke(
-                "Câmera aberta, mas sem frames. Acesse Ajustes do Sistema → Privacidade e Segurança → Câmera " +
-                "e permita o acesso para o Terminal (ou para o app). Em seguida, reinicie.");
-            return new VideoCapture();
-        }
-        any.Dispose();
-
-        // Retorna instância fechada para fluxo de erro uniforme.
-        return new VideoCapture();
+        return new VideoCapture(_config.CameraIndex, VideoCaptureAPIs.ANY);
     }
+
+    // ── Inference ──────────────────────────────────────────────────────────────
 
     private async Task RunInferenceAsync(Mat frame, CancellationToken ct)
     {

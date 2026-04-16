@@ -25,37 +25,52 @@ public sealed class MediaPipeSidecar : IDisposable
     private StreamReader? _stdout;
 
     /// <summary>
-    /// Resolves the sidecar script path: looks next to the running executable first,
-    /// then falls back to the given override path.
+    /// Resolves how to launch the sidecar:
+    ///   1. Compiled binary  (proposing-sidecar) next to the app — used in production .app
+    ///   2. Python script    (sidecar/mediapipe_sidecar.py) next to the binary — dev build
+    ///   3. Python script    relative to cwd — dotnet run fallback
+    /// Returns (executable, arguments): when the compiled binary is used, arguments is "".
     /// </summary>
-    public static string ResolveSidecarPath()
+    private static (string executable, string arguments) ResolveSidecarInvocation(string pythonPath)
     {
-        // When built, MSBuild copies sidecar/ next to the binary.
-        var nextToBinary = Path.Combine(AppContext.BaseDirectory, "sidecar", "mediapipe_sidecar.py");
-        if (File.Exists(nextToBinary))
-            return nextToBinary;
+        var baseDir = AppContext.BaseDirectory;
 
-        // Fallback: relative to current working directory (useful during development).
-        var fromCwd = Path.Combine("sidecar", "mediapipe_sidecar.py");
-        if (File.Exists(fromCwd))
-            return Path.GetFullPath(fromCwd);
+        // 1. Compiled sidecar binary — no Python needed (production .app bundle)
+        // PyInstaller --onedir layout: proposing-sidecar/proposing-sidecar
+        var compiledBin = Path.Combine(baseDir, "proposing-sidecar", "proposing-sidecar");
+        if (File.Exists(compiledBin))
+        {
+            Console.Error.WriteLine($"[sidecar] Using compiled binary: {compiledBin}");
+            return (compiledBin, "");
+        }
+
+        // 2. Python script next to the binary (dotnet publish / debug build)
+        var scriptNextToBinary = Path.Combine(baseDir, "sidecar", "mediapipe_sidecar.py");
+        if (File.Exists(scriptNextToBinary))
+            return (pythonPath, scriptNextToBinary);
+
+        // 3. Fallback: relative to current working directory (dotnet run from project root)
+        var scriptFromCwd = Path.GetFullPath(Path.Combine("sidecar", "mediapipe_sidecar.py"));
+        if (File.Exists(scriptFromCwd))
+            return (pythonPath, scriptFromCwd);
 
         throw new FileNotFoundException(
-            $"mediapipe_sidecar.py not found. Checked:\n  {nextToBinary}\n  {Path.GetFullPath(fromCwd)}");
+            $"mediapipe sidecar not found. Checked:\n  {compiledBin}\n  {scriptNextToBinary}\n  {scriptFromCwd}");
     }
 
     /// <summary>
     /// Starts the sidecar process and waits until MediaPipe finishes loading.
+    /// Uses the compiled binary (proposing-sidecar) when available; falls back to python3.
     /// Must be awaited before calling GetLandmarksAsync.
     /// </summary>
     public async Task StartAsync(string pythonPath = "python3")
     {
-        var scriptPath = ResolveSidecarPath();
-        Console.Error.WriteLine($"[sidecar] Starting: {pythonPath} {scriptPath}");
+        var (executable, arguments) = ResolveSidecarInvocation(pythonPath);
+        Console.Error.WriteLine($"[sidecar] Starting: {executable} {arguments}".TrimEnd());
 
         _process = new Process
         {
-            StartInfo = new ProcessStartInfo(pythonPath, scriptPath)
+            StartInfo = new ProcessStartInfo(executable, arguments)
             {
                 RedirectStandardInput  = true,
                 RedirectStandardOutput = true,

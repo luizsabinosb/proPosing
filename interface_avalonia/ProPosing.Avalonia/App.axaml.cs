@@ -3,6 +3,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using ProPosing.Avalonia.Evaluation;
 using ProPosing.Avalonia.Evaluation.Poses;
+using static ProPosing.Avalonia.Evaluation.PoseThresholds;
 using ProPosing.Avalonia.Services;
 using ProPosing.Avalonia.ViewModels;
 using ProPosing.Avalonia.Views;
@@ -20,26 +21,48 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            var appConfig = AppConfig.LoadFromEnvironment();
-            var sidecar = new MediaPipeSidecar();
-            var registry = new PoseEvaluatorRegistry([
-                new EnquadramentoEvaluator(),
-                new DoubleBicepsEvaluator(),
-                new SideChestEvaluator(),
-                new SideTricepsEvaluator(),
-                new MostMuscularEvaluator(),
+            var appConfig  = AppConfig.LoadFromEnvironment();
+            var thresholds = PoseThresholds.Load();
+            var sidecar    = new MediaPipeSidecar();
+            var registry   = new PoseEvaluatorRegistry([
+                new EnquadramentoEvaluator(thresholds.Enquadramento),
+                new DoubleBicepsEvaluator(thresholds.DoubleBiceps),
+                new SideChestEvaluator(thresholds.SideChest),
+                new SideTricepsEvaluator(thresholds.SideTriceps),
+                new MostMuscularEvaluator(thresholds.MostMuscular),
+                new QuarterTurnEvaluator(thresholds.QuarterTurn),
+                new FrontLatSpreadEvaluator(thresholds.FrontLatSpread),
+                new BackLatSpreadEvaluator(thresholds.BackLatSpread),
+                new AbsAndThighsEvaluator(thresholds.AbsAndThighs),
+                new TeaCupEvaluator(thresholds.TeaCup),
             ]);
             var cameraPipeline = new CameraPipelineService(appConfig, sidecar, registry);
-            var vm = new MainWindowViewModel(appConfig, cameraPipeline);
-            desktop.MainWindow = new MainWindow { DataContext = vm };
+            var mainVm         = new MainWindowViewModel(appConfig, cameraPipeline);
 
-            // Start sidecar in background — window appears immediately while MediaPipe loads.
-            // GetLandmarksAsync returns [] safely until the sidecar is ready.
+            // ── Pré-aquece o sidecar imediatamente — carrega em paralelo com o login ──
+            // MediaPipe leva ~5-10s para inicializar; iniciando agora, estará pronto
+            // (ou quase) quando o usuário terminar o login.
             _ = sidecar.StartAsync(appConfig.PythonPath).ContinueWith(t =>
             {
                 if (t.IsFaulted)
                     Console.Error.WriteLine($"[sidecar] Failed to start: {t.Exception?.InnerException?.Message}");
             });
+
+            // ── Login ────────────────────────────────────────────────────
+            var loginVm     = new LoginViewModel();
+            var loginWindow = new LoginWindow { DataContext = loginVm };
+
+            desktop.MainWindow = loginWindow;
+
+            loginVm.LoginSucceeded += () =>
+            {
+                var mainWindow = new MainWindow { DataContext = mainVm };
+
+                // Set new MainWindow before closing login to prevent app shutdown
+                desktop.MainWindow = mainWindow;
+                mainWindow.Show();
+                loginWindow.Close();
+            };
 
             desktop.ShutdownRequested += (_, _) => sidecar.Dispose();
         }

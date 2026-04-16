@@ -22,8 +22,8 @@
     <converters:PoseModeMatchToBrushConverter x:Key="PoseModeMatchToBrush" />
   </Window.Resources>
 
-  <!-- Root: top branding bar + main content -->
-  <Grid RowDefinitions="52,*">
+  <!-- Root: top branding bar + main content + footer -->
+  <Grid RowDefinitions="52,*,28">
 
     <!-- ── Top branding bar ─────────────────────────────────────────── -->
     <Border Grid.Row="0" Background="#0A0A0A">
@@ -66,7 +66,7 @@
           <Border Grid.Row="0" Padding="16,14">
             <StackPanel Spacing="4">
               <TextBlock Classes="panelTitle" Text="SELEÇÃO DE POSE" />
-              <TextBlock Text="Teclas 1 – 5 para trocar" Foreground="#55FFFFFF" FontSize="11" />
+              <TextBlock Text="Teclas 0 – 9 para trocar" Foreground="#55FFFFFF" FontSize="11" />
             </StackPanel>
           </Border>
 
@@ -74,44 +74,184 @@
           <ScrollViewer Grid.Row="1" Margin="10,0,10,10" VerticalScrollBarVisibility="Auto">
             <StackPanel Spacing="8">
 
+              <!-- 0 — Enquadramento -->
               <Button Classes="pose"
                       Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=enquadramento|background}"
                       BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=enquadramento|border}"
                       Command="{Binding SelectPoseCommand}"
                       CommandParameter="enquadramento">
-                <TextBlock Text="1. ENQUADRAMENTO" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+                <Grid ColumnDefinitions="36,*" VerticalAlignment="Center">
+                  <Border Grid.Column="0" Width="26" Height="26" Background="#22EF4444"
+                          BorderBrush="#55EF4444" BorderThickness="1" CornerRadius="6"
+                          HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock Text="0" FontSize="12" FontWeight="Bold" Foreground="#EF4444"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Grid.Column="1" Text="ENQUADRAMENTO" FontSize="13" FontWeight="Bold"
+                             Foreground="White" VerticalAlignment="Center" />
+                </Grid>
               </Button>
 
+              <!-- 1 — Duplo Bíceps -->
               <Button Classes="pose"
                       Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=double_biceps|background}"
                       BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=double_biceps|border}"
                       Command="{Binding SelectPoseCommand}"
                       CommandParameter="double_biceps">
-                <TextBlock Text="2. DUPLO BÍCEPS" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+                <Grid ColumnDefinitions="36,*" VerticalAlignment="Center">
+                  <Border Grid.Column="0" Width="26" Height="26" Background="#22EF4444"
+                          BorderBrush="#55EF4444" BorderThickness="1" CornerRadius="6"
+                          HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock Text="1" FontSize="12" FontWeight="Bold" Foreground="#EF4444"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Grid.Column="1" Text="DUPLO BÍCEPS" FontSize="13" FontWeight="Bold"
+                             Foreground="White" VerticalAlignment="Center" />
+                </Grid>
               </Button>
 
+              <!-- 2 — Side Chest -->
               <Button Classes="pose"
                       Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=side_chest|background}"
                       BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=side_chest|border}"
                       Command="{Binding SelectPoseCommand}"
                       CommandParameter="side_chest">
-                <TextBlock Text="3. SIDE CHEST" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+                <Grid ColumnDefinitions="36,*" VerticalAlignment="Center">
+                  <Border Grid.Column="0" Width="26" Height="26" Background="#22EF4444"
+                          BorderBrush="#55EF4444" BorderThickness="1" CornerRadius="6"
+                          HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock Text="2" FontSize="12" FontWeight="Bold" Foreground="#EF4444"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Grid.Column="1" Text="SIDE CHEST" FontSize="13" FontWeight="Bold"
+                             Foreground="White" VerticalAlignment="Center" />
+                </Grid>
               </Button>
 
+              <!-- 3 — Side Tríceps -->
               <Button Classes="pose"
                       Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=side_triceps|background}"
                       BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=side_triceps|border}"
                       Command="{Binding SelectPoseCommand}"
                       CommandParameter="side_triceps">
-                <TextBlock Text="4. SIDE TRÍCEPS" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+                <Grid ColumnDefinitions="36,*" VerticalAlignment="Center">
+                  <Border Grid.Column="0" Width="26" Height="26" Background="#22EF4444"
+                          BorderBrush="#55EF4444" BorderThickness="1" CornerRadius="6"
+                          HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock Text="3" FontSize="12" FontWeight="Bold" Foreground="#EF4444"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Grid.Column="1" Text="SIDE TRÍCEPS" FontSize="13" FontWeight="Bold"
+                             Foreground="White" VerticalAlignment="Center" />
+                </Grid>
               </Button>
 
+              <!-- 4 — Most Muscular -->
               <Button Classes="pose"
                       Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=most_muscular|background}"
                       BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=most_muscular|border}"
                       Command="{Binding SelectPoseCommand}"
                       CommandParameter="most_muscular">
-                <TextBlock Text="5. MOST MUSCULAR" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
+                <Grid ColumnDefinitions="36,*" VerticalAlignment="Center">
+                  <Border Grid.Column="0" Width="26" Height="26" Background="#22EF4444"
+                          BorderBrush="#55EF4444" BorderThickness="1" CornerRadius="6"
+                          HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock Text="4" FontSize="12" FontWeight="Bold" Foreground="#EF4444"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Grid.Column="1" Text="MOST MUSCULAR" FontSize="13" FontWeight="Bold"
+                             Foreground="White" VerticalAlignment="Center" />
+                </Grid>
+              </Button>
+
+              <!-- 5 — Quarter Turn -->
+              <Button Classes="pose"
+                      Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=quarter_turn_side|background}"
+                      BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=quarter_turn_side|border}"
+                      Command="{Binding SelectPoseCommand}"
+                      CommandParameter="quarter_turn_side">
+                <Grid ColumnDefinitions="36,*" VerticalAlignment="Center">
+                  <Border Grid.Column="0" Width="26" Height="26" Background="#22EF4444"
+                          BorderBrush="#55EF4444" BorderThickness="1" CornerRadius="6"
+                          HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock Text="5" FontSize="12" FontWeight="Bold" Foreground="#EF4444"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Grid.Column="1" Text="QUARTER TURN" FontSize="13" FontWeight="Bold"
+                             Foreground="White" VerticalAlignment="Center" />
+                </Grid>
+              </Button>
+
+              <!-- 6 — Front Lat Spread -->
+              <Button Classes="pose"
+                      Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=front_lat_spread|background}"
+                      BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=front_lat_spread|border}"
+                      Command="{Binding SelectPoseCommand}"
+                      CommandParameter="front_lat_spread">
+                <Grid ColumnDefinitions="36,*" VerticalAlignment="Center">
+                  <Border Grid.Column="0" Width="26" Height="26" Background="#22EF4444"
+                          BorderBrush="#55EF4444" BorderThickness="1" CornerRadius="6"
+                          HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock Text="6" FontSize="12" FontWeight="Bold" Foreground="#EF4444"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Grid.Column="1" Text="FRONT LAT SPREAD" FontSize="13" FontWeight="Bold"
+                             Foreground="White" VerticalAlignment="Center" />
+                </Grid>
+              </Button>
+
+              <!-- 7 — Back Lat Spread -->
+              <Button Classes="pose"
+                      Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=back_lat_spread|background}"
+                      BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=back_lat_spread|border}"
+                      Command="{Binding SelectPoseCommand}"
+                      CommandParameter="back_lat_spread">
+                <Grid ColumnDefinitions="36,*" VerticalAlignment="Center">
+                  <Border Grid.Column="0" Width="26" Height="26" Background="#22EF4444"
+                          BorderBrush="#55EF4444" BorderThickness="1" CornerRadius="6"
+                          HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock Text="7" FontSize="12" FontWeight="Bold" Foreground="#EF4444"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Grid.Column="1" Text="BACK LAT SPREAD" FontSize="13" FontWeight="Bold"
+                             Foreground="White" VerticalAlignment="Center" />
+                </Grid>
+              </Button>
+
+              <!-- 8 — Abs and Thighs -->
+              <Button Classes="pose"
+                      Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=abs_and_thighs|background}"
+                      BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=abs_and_thighs|border}"
+                      Command="{Binding SelectPoseCommand}"
+                      CommandParameter="abs_and_thighs">
+                <Grid ColumnDefinitions="36,*" VerticalAlignment="Center">
+                  <Border Grid.Column="0" Width="26" Height="26" Background="#22EF4444"
+                          BorderBrush="#55EF4444" BorderThickness="1" CornerRadius="6"
+                          HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock Text="8" FontSize="12" FontWeight="Bold" Foreground="#EF4444"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Grid.Column="1" Text="ABS AND THIGHS" FontSize="13" FontWeight="Bold"
+                             Foreground="White" VerticalAlignment="Center" />
+                </Grid>
+              </Button>
+
+              <!-- 9 — Tea Cup -->
+              <Button Classes="pose"
+                      Background="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=teacup|background}"
+                      BorderBrush="{Binding SelectedPoseMode, Converter={StaticResource PoseModeMatchToBrush}, ConverterParameter=teacup|border}"
+                      Command="{Binding SelectPoseCommand}"
+                      CommandParameter="teacup">
+                <Grid ColumnDefinitions="36,*" VerticalAlignment="Center">
+                  <Border Grid.Column="0" Width="26" Height="26" Background="#22EF4444"
+                          BorderBrush="#55EF4444" BorderThickness="1" CornerRadius="6"
+                          HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock Text="9" FontSize="12" FontWeight="Bold" Foreground="#EF4444"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Grid.Column="1" Text="TEA CUP" FontSize="13" FontWeight="Bold"
+                             Foreground="White" VerticalAlignment="Center" />
+                </Grid>
               </Button>
 
             </StackPanel>
@@ -144,23 +284,62 @@
                                            ImageWidth="{Binding ImageWidth}"
                                            ImageHeight="{Binding ImageHeight}" />
 
-          <!-- Placeholder when camera is off -->
+          <!-- Placeholder when camera is off / waiting / error -->
           <Border Background="#00000000" IsVisible="{Binding ShowPlaceholder}">
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
-              <TextBlock Text="Aguardando câmera..."
-                         FontSize="22"
-                         Foreground="#60FFFFFF"
-                         HorizontalAlignment="Center" />
-              <TextBlock Text="{Binding CameraError}"
-                         IsVisible="{Binding HasCameraError}"
-                         Foreground="#EF4444"
-                         FontSize="13"
-                         HorizontalAlignment="Center"
-                         TextWrapping="Wrap" />
-              <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
-                <Button Content="Ativar câmera" Command="{Binding StartCameraCommand}" />
-                <Button Content="Parar" Command="{Binding StopCameraCommand}" />
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="20" MaxWidth="420">
+
+              <!-- Waiting for permission state -->
+              <StackPanel IsVisible="{Binding HasCameraStatusMessage}" Spacing="12" HorizontalAlignment="Center">
+                <TextBlock Text="📷"
+                           FontSize="40"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding CameraStatusMessage}"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="#CCFFFFFF"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"
+                           LineHeight="24" />
               </StackPanel>
+
+              <!-- Idle state (no error, no status message) -->
+              <TextBlock IsVisible="{Binding !HasCameraStatusMessage}"
+                         Text="Inicializando câmera..."
+                         FontSize="18"
+                         Foreground="#50FFFFFF"
+                         HorizontalAlignment="Center" />
+
+              <!-- Error state -->
+              <Border IsVisible="{Binding HasCameraError}"
+                      Background="#1AEF4444"
+                      BorderBrush="#44EF4444"
+                      BorderThickness="1"
+                      CornerRadius="10"
+                      Padding="20,16">
+                <StackPanel Spacing="12">
+                  <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                    <TextBlock Text="⚠" FontSize="16" Foreground="#EF4444" VerticalAlignment="Center" />
+                    <TextBlock Text="Câmera indisponível"
+                               FontSize="15"
+                               FontWeight="Bold"
+                               Foreground="#EF4444"
+                               VerticalAlignment="Center" />
+                  </StackPanel>
+                  <TextBlock Text="{Binding CameraError}"
+                             Foreground="#DDFFFFFF"
+                             FontSize="13"
+                             HorizontalAlignment="Center"
+                             TextAlignment="Center"
+                             TextWrapping="Wrap"
+                             LineHeight="20" />
+                  <Button Content="Tentar novamente"
+                          Command="{Binding StartCameraCommand}"
+                          HorizontalAlignment="Center"
+                          Margin="0,4,0,0" />
+                </StackPanel>
+              </Border>
+
             </StackPanel>
           </Border>
         </Grid>
@@ -174,7 +353,8 @@
           <StackPanel Grid.Row="0" Spacing="12">
 
             <!-- Section header -->
-            <TextBlock Text="AVALIAÇÃO" Classes="panelTitle" Margin="0,0,0,4" />
+            <TextBlock Text="AVALIAÇÃO" Classes="panelTitle" Margin="0,0,0,4"
+                       HorizontalAlignment="Center" TextAlignment="Center" />
 
             <!-- ── Single feedback card ──────────────────────────────── -->
             <Border CornerRadius="12"
@@ -197,62 +377,40 @@
                 <!-- Thin divider -->
                 <Border Height="1" Background="#18FFFFFF" />
 
-                <!-- Main message — large, easy to scan at a glance -->
+                <!-- Standalone message: success text OR single early-return guard message -->
                 <TextBlock Text="{Binding PoseQuality}"
+                           IsVisible="{Binding HasPoseQualityMessage}"
                            FontSize="17"
                            FontWeight="SemiBold"
                            Foreground="White"
                            TextWrapping="Wrap"
                            LineHeight="24" />
 
-                <!-- Secondary corrections (model guarantees no duplication) -->
+                <!-- All correction hints — uniform style and size -->
                 <ItemsControl ItemsSource="{Binding Hints}"
                               IsVisible="{Binding HasHints}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,0,0">
-                        <TextBlock Text="›"
-                                   Foreground="#70FFFFFF"
-                                   FontSize="13"
+                      <Border Classes="hint">
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                          <Ellipse Width="7" Height="7"
+                                   Fill="#EF4444"
                                    VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding}"
-                                   FontSize="13"
-                                   Foreground="#AAFFFFFF"
-                                   TextWrapping="Wrap"
-                                   VerticalAlignment="Center" />
-                      </StackPanel>
+                          <TextBlock Text="{Binding}"
+                                     FontSize="17"
+                                     FontWeight="SemiBold"
+                                     Foreground="#EEFFFFFF"
+                                     TextWrapping="Wrap"
+                                     LineHeight="22"
+                                     VerticalAlignment="Center" />
+                        </StackPanel>
+                      </Border>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
               </StackPanel>
             </Border>
-
-            <!-- Stats row -->
-            <Grid ColumnDefinitions="*,*" Margin="0,4,0,0">
-              <Border Grid.Column="0" Classes="statCard" Margin="0,0,6,0">
-                <StackPanel HorizontalAlignment="Center">
-                  <TextBlock Text="{Binding Fps}"
-                             FontSize="26" FontWeight="Bold"
-                             Foreground="#EF4444"
-                             HorizontalAlignment="Center" />
-                  <TextBlock Text="FPS"
-                             FontSize="11" Foreground="#55FFFFFF"
-                             HorizontalAlignment="Center" />
-                </StackPanel>
-              </Border>
-              <Border Grid.Column="1" Classes="statCard" Margin="6,0,0,0">
-                <StackPanel HorizontalAlignment="Center">
-                  <TextBlock Text="{Binding LandmarksCount}"
-                             FontSize="26" FontWeight="Bold"
-                             Foreground="#EF4444"
-                             HorizontalAlignment="Center" />
-                  <TextBlock Text="pontos"
-                             FontSize="11" Foreground="#55FFFFFF"
-                             HorizontalAlignment="Center" />
-                </StackPanel>
-              </Border>
-            </Grid>
 
           </StackPanel>
 
@@ -264,7 +422,12 @@
                   BorderThickness="1"
                   ClipToBounds="True"
                   Margin="0,12,0,0">
-            <Panel>
+            <Panel Opacity="{Binding ReferenceImageOpacity}">
+              <Panel.Transitions>
+                <Transitions>
+                  <DoubleTransition Property="Opacity" Duration="0:0:0.18" Easing="CubicEaseInOut" />
+                </Transitions>
+              </Panel.Transitions>
 
               <!-- Image available -->
               <Grid IsVisible="{Binding HasReferenceImage}">
@@ -337,5 +500,32 @@
       </Border>
 
     </Grid>
+
+    <!-- ── Footer ───────────────────────────────────────────────────── -->
+    <Border Grid.Row="2" Background="#0A0A0A" BorderBrush="#18EF4444" BorderThickness="0,1,0,0">
+      <Grid ColumnDefinitions="*,Auto" Margin="16,0">
+        <TextBlock Grid.Column="0"
+                   Text="© 2026 Feral Tech Supplies · All rights reserved."
+                   FontSize="10"
+                   FontStyle="Italic"
+                   Foreground="#22FFFFFF"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1"
+                    Orientation="Horizontal"
+                    Spacing="5"
+                    VerticalAlignment="Center">
+          <Ellipse Width="6" Height="6"
+                   Fill="{Binding FpsIndicatorBrush}"
+                   VerticalAlignment="Center" />
+          <TextBlock Text="{Binding Fps, StringFormat='{}{0} FPS'}"
+                     FontSize="10"
+                     FontWeight="Bold"
+                     Foreground="#44FFFFFF"
+                     VerticalAlignment="Center" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
   </Grid>
 </Window>

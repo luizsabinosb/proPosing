@@ -3,11 +3,16 @@ using static ProPosing.Avalonia.Evaluation.GeometryHelper;
 
 namespace ProPosing.Avalonia.Evaluation.Poses;
 
+/// <summary>
+/// Double Biceps: facing camera front-on, both arms raised with elbows at shoulder height,
+/// spread wide, flexed at 60–80°, wrists curled inward/upward.
+/// </summary>
 public sealed class DoubleBicepsEvaluator : IPoseEvaluator
 {
-    // Thresholds from pose_evaluator.py
-    private const double MinAngle = 30;
-    private const double MaxAngle = 80;
+    private readonly DoubleBicepsThresholds _t;
+
+    public DoubleBicepsEvaluator(DoubleBicepsThresholds? thresholds = null)
+        => _t = thresholds ?? new DoubleBicepsThresholds();
 
     public string PoseMode => "double_biceps";
 
@@ -25,39 +30,47 @@ public sealed class DoubleBicepsEvaluator : IPoseEvaluator
 
         var errors = new List<string>();
 
+        // ── 1. Cotovelos elevados (na altura dos ombros) ──────────────
+        if (leftOk && le.Y > ls.Y + _t.ElbowAboveShoulderTolerance)
+            errors.Add("Eleve o cotovelo esquerdo até a altura do ombro");
+        if (rightOk && re.Y > rs.Y + _t.ElbowAboveShoulderTolerance)
+            errors.Add("Eleve o cotovelo direito até a altura do ombro");
+
+        // ── 2. Ângulo de flexão dos braços ────────────────────────────
         if (leftOk)
         {
             double angle = Angle(ls, le, lw);
-            // In normalized Y: smaller Y = higher in image.
-            // Elbow must be at or ABOVE shoulder → le.Y <= ls.Y
-            if (le.Y > ls.Y + 0.02)
-                errors.Add("Cotovelo esquerdo muito baixo — eleve até a altura do ombro");
-            if (angle < MinAngle)
-                errors.Add($"Braço esquerdo muito fechado — abra para {MinAngle}–{MaxAngle}° (atual: {angle:F0}°)");
-            else if (angle > MaxAngle)
-                errors.Add($"Braço esquerdo muito aberto — feche para {MinAngle}–{MaxAngle}° (atual: {angle:F0}°)");
+            if (angle < _t.ElbowMinAngle)
+                errors.Add($"Braço esquerdo muito fechado — abra para {_t.ElbowMinAngle}–{_t.ElbowMaxAngle}° (atual: {angle:F0}°)");
+            else if (angle > _t.ElbowMaxAngle)
+                errors.Add($"Braço esquerdo muito aberto — feche para {_t.ElbowMinAngle}–{_t.ElbowMaxAngle}° (atual: {angle:F0}°)");
         }
-
         if (rightOk)
         {
             double angle = Angle(rs, re, rw);
-            if (re.Y > rs.Y + 0.02)
-                errors.Add("Cotovelo direito muito baixo — eleve até a altura do ombro");
-            if (angle < MinAngle)
-                errors.Add($"Braço direito muito fechado — abra para {MinAngle}–{MaxAngle}° (atual: {angle:F0}°)");
-            else if (angle > MaxAngle)
-                errors.Add($"Braço direito muito aberto — feche para {MinAngle}–{MaxAngle}° (atual: {angle:F0}°)");
+            if (angle < _t.ElbowMinAngle)
+                errors.Add($"Braço direito muito fechado — abra para {_t.ElbowMinAngle}–{_t.ElbowMaxAngle}° (atual: {angle:F0}°)");
+            else if (angle > _t.ElbowMaxAngle)
+                errors.Add($"Braço direito muito aberto — feche para {_t.ElbowMinAngle}–{_t.ElbowMaxAngle}° (atual: {angle:F0}°)");
         }
 
-        // Symmetry check when both arms are visible
+        // ── 3. Cotovelos abertos (não colados ao tronco) ──────────────
+        if (leftOk && rightOk && IsVisible(ls) && IsVisible(rs))
+        {
+            double shoulderSpan = Math.Abs(ls.X - rs.X);
+            double elbowSpan    = Math.Abs(le.X - re.X);
+            if (shoulderSpan > 0 && elbowSpan < shoulderSpan * _t.ElbowSpreadMinRatio)
+                errors.Add("Abra mais os cotovelos para os lados — braços devem estar bem abertos");
+        }
+
+        // ── 4. Simetria dos cotovelos ─────────────────────────────────
         if (leftOk && rightOk)
         {
             double elbowAsymmetry = Math.Abs(le.Y - re.Y);
-            if (elbowAsymmetry > 0.06)
-                errors.Add("Assimetria: alinhe os cotovelos");
+            if (elbowAsymmetry > _t.ElbowAsymmetryMax)
+                errors.Add("Alinhe os cotovelos — um lado está mais baixo que o outro");
         }
 
-        return PoseFeedback.FromErrors(errors,
-            "Excelente duplo bíceps! Bíceps bem definidos e simétricos.");
+        return PoseFeedback.FromErrors(errors, "Excelente duplo bíceps! Bíceps bem definidos e simétricos.");
     }
 }

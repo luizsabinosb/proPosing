@@ -44,4 +44,12 @@
     <AvaloniaResource Include="Assets/References/**" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Assets/Logo/proposing.icns" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="pose_thresholds.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

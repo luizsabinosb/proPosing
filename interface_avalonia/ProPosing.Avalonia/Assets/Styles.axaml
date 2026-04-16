@@ -6,19 +6,72 @@
     <Setter Property="Foreground" Value="White" />
   </Style>
 
+  <!-- ── Pose button ────────────────────────────────────────────── -->
   <Style Selector="Button.pose">
-    <Setter Property="Height" Value="62" />
+    <Setter Property="Height" Value="58" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
     <Setter Property="CornerRadius" Value="10" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="Padding" Value="16,10" />
+    <Setter Property="Padding" Value="12,8" />
     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Panel>
+            <!-- Base: fundo + borda dinâmicos via binding -->
+            <Border Name="PART_Border"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}"
+                    Padding="{TemplateBinding Padding}">
+              <ContentPresenter Name="PART_ContentPresenter"
+                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                Content="{TemplateBinding Content}" />
+            </Border>
+            <!-- Overlay de hover/pressed — camada branca translúcida sobre o fundo -->
+            <Border Name="PART_Hover"
+                    CornerRadius="10"
+                    IsHitTestVisible="False"
+                    Background="Transparent">
+              <Border.Transitions>
+                <Transitions>
+                  <BrushTransition Property="Background" Duration="0:0:0.15" />
+                </Transitions>
+              </Border.Transitions>
+            </Border>
+          </Panel>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+  <!-- Suprime o highlight padrão do FluentTheme no ContentPresenter -->
+  <Style Selector="Button.pose /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.pose:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.pose:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.pose:pointerover /template/ Border#PART_Hover">
+    <Setter Property="Background" Value="#14FFFFFF" />
+  </Style>
+  <Style Selector="Button.pose:pressed /template/ Border#PART_Hover">
+    <Setter Property="Background" Value="#28FFFFFF" />
   </Style>
 
+  <!-- ── Panel titles — Ethnocentric, coeso com o logo ─────────── -->
   <Style Selector="TextBlock.panelTitle">
-    <Setter Property="FontSize" Value="22" />
-    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="FontFamily" Value="avares://ProPosing.Avalonia/Assets/Fonts#Ethnocentric" />
+    <Setter Property="FontSize" Value="16" />
+    <Setter Property="FontWeight" Value="Regular" />
     <Setter Property="Foreground" Value="White" />
-    <Setter Property="LetterSpacing" Value="2" />
+    <Setter Property="LetterSpacing" Value="1" />
   </Style>
 
   <Style Selector="Border.card">
@@ -44,6 +97,52 @@
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="Padding" Value="12,8" />
     <Setter Property="Margin" Value="0,0,0,6" />
+  </Style>
+
+  <!-- ── Login fields ─────────────────────────────────────────── -->
+  <Style Selector="TextBox.loginField">
+    <Setter Property="Background" Value="#0D0D0D" />
+    <Setter Property="Foreground" Value="White" />
+    <Setter Property="BorderBrush" Value="#33EF4444" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="12,10" />
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="SelectionBrush" Value="#44EF4444" />
+    <Setter Property="CaretBrush" Value="#EF4444" />
+    <Setter Property="MinHeight" Value="44" />
+  </Style>
+  <Style Selector="TextBox.loginField:pointerover">
+    <Setter Property="BorderBrush" Value="#55EF4444" />
+  </Style>
+  <Style Selector="TextBox.loginField:focus">
+    <Setter Property="BorderBrush" Value="#99EF4444" />
+    <Setter Property="Background" Value="#151515" />
+  </Style>
+
+  <!-- ── Login button ─────────────────────────────────────────── -->
+  <Style Selector="Button.loginBtn">
+    <Setter Property="Background" Value="#EF4444" />
+    <Setter Property="Foreground" Value="White" />
+    <Setter Property="BorderBrush" Value="#CC2222" />
+    <Setter Property="BorderThickness" Value="0,0,0,3" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Height" Value="50" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <Style Selector="Button.loginBtn:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="#D93333" />
+  </Style>
+  <Style Selector="Button.loginBtn:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="#B91C1C" />
+  </Style>
+  <Style Selector="Button.loginBtn:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="#3D1010" />
+    <Setter Property="Opacity" Value="0.6" />
   </Style>
 
 </Styles>
