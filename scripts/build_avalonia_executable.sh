@@ -115,6 +115,19 @@ else
         "$SIDECAR_SCRIPT"
 
     [ ! -f "$SIDECAR_BIN" ] && { echo -e "${RED}❌ Sidecar não foi gerado${NC}"; exit 1; }
+
+    # PyInstaller às vezes omite pose_landmark_lite.tflite (model_complexity=0).
+    # Copiamos explicitamente da instalação local para garantir que esteja no bundle.
+    MEDIAPIPE_MODULES="$(python3 -c 'import mediapipe, os; print(os.path.join(os.path.dirname(mediapipe.__file__), "modules"))' 2>/dev/null)"
+    LITE_MODEL="$MEDIAPIPE_MODULES/pose_landmark/pose_landmark_lite.tflite"
+    BUNDLE_POSE_DIR="$SIDECAR_DIR/_internal/mediapipe/modules/pose_landmark"
+    if [ -f "$LITE_MODEL" ] && [ -d "$BUNDLE_POSE_DIR" ]; then
+        cp "$LITE_MODEL" "$BUNDLE_POSE_DIR/"
+        echo -e "${GREEN}   ✅ pose_landmark_lite.tflite copiado para o bundle${NC}"
+    else
+        echo -e "${YELLOW}   ⚠️  pose_landmark_lite.tflite não encontrado — sidecar usará modelo full${NC}"
+    fi
+
     echo -e "${GREEN}   ✅ Sidecar empacotado${NC}"
 fi
 
