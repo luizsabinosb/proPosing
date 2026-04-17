@@ -5,9 +5,7 @@
 #
 # Variáveis de controle (exportar antes de rodar ou prefixar no comando):
 #   TARGET_RUNTIME          osx-arm64 (padrão) | osx-x64 | win-x64
-#   SKIP_BACKEND_BUILD      1 = pula PyInstaller do backend (exige dist/proposing-backend)
 #   SKIP_SIDECAR_BUILD      1 = pula PyInstaller do sidecar (exige dist/proposing-sidecar/)
-#   FORCE_BACKEND_REBUILD   1 = força rebuild do backend mesmo se dist/ existir
 #   FORCE_SIDECAR_REBUILD   1 = força rebuild do sidecar mesmo se dist/ existir
 #   PYINSTALLER_CLEAN       1 = passa --clean para o PyInstaller
 #   SKIP_PIP_INSTALL        1 = pula pip install (quando deps já estão instaladas)
@@ -29,18 +27,16 @@ BUILD_DIR="$PROJECT_DIR/build_app"
 PYI_WORK_DIR="$PROJECT_DIR/.pyinstaller_work"
 
 TARGET_RUNTIME="${TARGET_RUNTIME:-osx-arm64}"
-SKIP_BACKEND_BUILD="${SKIP_BACKEND_BUILD:-0}"
 SKIP_SIDECAR_BUILD="${SKIP_SIDECAR_BUILD:-0}"
-FORCE_BACKEND_REBUILD="${FORCE_BACKEND_REBUILD:-0}"
 FORCE_SIDECAR_REBUILD="${FORCE_SIDECAR_REBUILD:-0}"
 PYINSTALLER_CLEAN="${PYINSTALLER_CLEAN:-0}"
 SKIP_PIP_INSTALL="${SKIP_PIP_INSTALL:-0}"
 
 AVALONIA_PROJECT="$PROJECT_DIR/interface_avalonia/ProPosing.Avalonia/ProPosing.Avalonia.csproj"
-BACKEND_BIN="$DIST_DIR/proposing-backend"
 SIDECAR_DIR="$DIST_DIR/proposing-sidecar"          # --onedir output
 SIDECAR_BIN="$SIDECAR_DIR/proposing-sidecar"       # executável dentro do dir
 SIDECAR_SCRIPT="$PROJECT_DIR/interface_avalonia/sidecar/mediapipe_sidecar.py"
+SIDECAR_REQS="$PROJECT_DIR/interface_avalonia/sidecar/requirements.txt"
 
 echo -e "${BLUE}"
 echo "╔════════════════════════════════════════════════════════╗"
@@ -76,8 +72,10 @@ if ! python3 -c "import PyInstaller" 2>/dev/null; then
 fi
 
 if [ "$SKIP_PIP_INSTALL" -eq 0 ]; then
-    echo -e "${YELLOW}   Instalando dependências backend...${NC}"
-    pip3 install -q -r "$PROJECT_DIR/backend/requirements.txt"
+    if [ -f "$SIDECAR_REQS" ]; then
+        echo -e "${YELLOW}   Instalando dependências do sidecar...${NC}"
+        pip3 install -q -r "$SIDECAR_REQS"
+    fi
 else
     echo -e "${YELLOW}   Pulando pip install (SKIP_PIP_INSTALL=1)${NC}"
 fi
@@ -87,28 +85,8 @@ PYINSTALLER_CLEAN_FLAG=""
 
 mkdir -p "$PYI_WORK_DIR" "$DIST_DIR"
 
-# ── 2. Backend (FastAPI HTTP) ──────────────────────────────────────────────────
-echo -e "\n${YELLOW}2. Empacotando backend (PyInstaller)...${NC}"
-
-if [ "$SKIP_BACKEND_BUILD" -eq 1 ]; then
-    [ ! -f "$BACKEND_BIN" ] && \
-        { echo -e "${RED}❌ SKIP_BACKEND_BUILD=1 exige dist/proposing-backend${NC}"; exit 1; }
-    echo -e "${YELLOW}   Pulando build do backend (SKIP_BACKEND_BUILD=1)${NC}"
-elif [ -f "$BACKEND_BIN" ] && [ "$FORCE_BACKEND_REBUILD" -eq 0 ]; then
-    echo -e "${GREEN}   ✅ Reutilizando dist/proposing-backend${NC}"
-else
-    echo -e "${YELLOW}   Gerando backend...${NC}"
-    [ "$PYINSTALLER_CLEAN" -eq 1 ] && { rm -rf "$PYI_WORK_DIR" "$DIST_DIR"; mkdir -p "$PYI_WORK_DIR" "$DIST_DIR"; }
-    run_pyinstaller "backend" pyinstaller $PYINSTALLER_CLEAN_FLAG --noconfirm \
-        --workpath "$PYI_WORK_DIR" \
-        --distpath "$DIST_DIR" \
-        "$PROJECT_DIR/config/proposing_build.spec"
-    [ ! -f "$BACKEND_BIN" ] && { echo -e "${RED}❌ Backend não foi gerado${NC}"; exit 1; }
-    echo -e "${GREEN}   ✅ Backend empacotado${NC}"
-fi
-
-# ── 2b. Sidecar MediaPipe ──────────────────────────────────────────────────────
-echo -e "\n${YELLOW}2b. Empacotando sidecar MediaPipe (PyInstaller)...${NC}"
+# ── 2. Sidecar MediaPipe ───────────────────────────────────────────────────────
+echo -e "\n${YELLOW}2. Empacotando sidecar MediaPipe (PyInstaller)...${NC}"
 
 if [ "$SKIP_SIDECAR_BUILD" -eq 1 ]; then
     [ ! -f "$SIDECAR_BIN" ] && \
@@ -166,9 +144,6 @@ if [[ "$TARGET_RUNTIME" == osx-* ]]; then
     # Avalonia binaries
     cp -R "$PUBLISH_DIR/"* "$FINAL_APP/Contents/MacOS/"
 
-    # Backend
-    cp "$BACKEND_BIN" "$FINAL_APP/Contents/MacOS/"
-
     # Sidecar (--onedir: copia o diretório inteiro)
     cp -R "$SIDECAR_DIR" "$FINAL_APP/Contents/MacOS/"
 
@@ -181,32 +156,10 @@ if [[ "$TARGET_RUNTIME" == osx-* ]]; then
         echo -e "${YELLOW}   ⚠️  proposing.icns não encontrado${NC}"
     fi
 
-    # Launcher — inicia backend em background (não bloqueante) e depois o app
+    # Launcher — inicia diretamente o app Avalonia
     cat > "$FINAL_APP/Contents/MacOS/proposing-launcher" << 'LAUNCHER'
 #!/bin/bash
 DIR="$(cd "$(dirname "$0")" && pwd)"
-
-# Inicia backend em background; continua mesmo se falhar
-"$DIR/proposing-backend" &
-BACKEND_PID=$!
-
-# Aguarda até 10s pelo backend; se não subir, prossegue mesmo assim
-for i in $(seq 1 20); do
-    if curl -s http://localhost:8000/health >/dev/null 2>&1; then
-        break
-    fi
-    # Se o processo já morreu, não adianta esperar mais
-    if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
-        break
-    fi
-    sleep 0.5
-done
-
-cleanup() {
-    kill "$BACKEND_PID" 2>/dev/null || true
-}
-trap cleanup EXIT
-
 exec "$DIR/ProPosing.Avalonia"
 LAUNCHER
 
@@ -241,7 +194,6 @@ LAUNCHER
 PLIST
 
     chmod +x "$FINAL_APP/Contents/MacOS/proposing-launcher"
-    chmod +x "$FINAL_APP/Contents/MacOS/proposing-backend"
     chmod +x "$FINAL_APP/Contents/MacOS/proposing-sidecar/proposing-sidecar"
     chmod +x "$FINAL_APP/Contents/MacOS/ProPosing.Avalonia"
 
@@ -250,7 +202,6 @@ else
     rm -rf "$FINAL_DIR"
     mkdir -p "$FINAL_DIR"
     cp -R "$PUBLISH_DIR/"* "$FINAL_DIR/"
-    cp "$BACKEND_BIN" "$FINAL_DIR/"
     cp -R "$SIDECAR_DIR" "$FINAL_DIR/"
 fi
 
@@ -267,9 +218,7 @@ else
 fi
 echo ""
 echo -e "${YELLOW}Flags úteis:${NC}"
-echo "   SKIP_BACKEND_BUILD=1      pula backend  (exige dist/proposing-backend)"
 echo "   SKIP_SIDECAR_BUILD=1      pula sidecar  (exige dist/proposing-sidecar/)"
-echo "   FORCE_BACKEND_REBUILD=1   força rebuild do backend"
 echo "   FORCE_SIDECAR_REBUILD=1   força rebuild do sidecar"
 echo "   SKIP_PIP_INSTALL=1        pula pip install"
 echo "   PYINSTALLER_CLEAN=1       limpa cache do PyInstaller"
