@@ -4,82 +4,78 @@
         x:Class="ProPosing.Avalonia.Views.LoginWindow"
         x:DataType="vm:LoginViewModel"
         Title="proPosing"
-        Width="420"
-        Height="600"
+        Width="440"
+        Height="620"
         CanResize="False"
-        Background="#0A0A0A"
+        Background="{StaticResource SurfaceBase}"
         WindowStartupLocation="CenterScreen"
         KeyDown="OnKeyDown">
 
-  <Grid RowDefinitions="52,*,36">
+  <Grid RowDefinitions="48,*,40">
 
-    <!-- ── Top branding bar ─────────────────────────────────────── -->
-    <Border Grid.Row="0" Background="#0A0A0A">
-      <Border BorderBrush="#33EF4444" BorderThickness="0,0,0,1">
-        <TextBlock Text="Powered by Feral Tech Supplies"
-                   FontSize="11"
-                   FontStyle="Italic"
-                   Foreground="#33FFFFFF"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center" />
-      </Border>
+    <!-- ── Top bar ──────────────────────────────────────────────── -->
+    <Border Grid.Row="0"
+            Background="{StaticResource SurfaceBase}"
+            BorderBrush="{StaticResource AccentMuted}"
+            BorderThickness="0,0,0,1">
+      <TextBlock Text="Powered by Feral Tech Supplies"
+                 FontSize="11"
+                 FontStyle="Italic"
+                 Foreground="{StaticResource TextMuted}"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Center"
+                 LetterSpacing="0.5" />
     </Border>
 
     <!-- ── Login form ───────────────────────────────────────────── -->
     <StackPanel Grid.Row="1"
                 VerticalAlignment="Center"
                 HorizontalAlignment="Center"
-                Width="348"
+                Width="360"
                 Spacing="0">
 
       <!-- Heading -->
-      <StackPanel HorizontalAlignment="Center" Spacing="2" Margin="0,0,0,28">
+      <StackPanel HorizontalAlignment="Center" Spacing="8" Margin="0,0,0,32">
         <TextBlock Text="BEM-VINDO AO"
-                   FontSize="11"
-                   FontWeight="Bold"
-                   Foreground="#55FFFFFF"
-                   HorizontalAlignment="Center"
-                   LetterSpacing="4" />
+                   Classes="caption"
+                   HorizontalAlignment="Center" />
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="0">
           <TextBlock Text="pro"
-                     FontFamily="Ethnocentric"
-                     FontSize="30"
+                     FontFamily="{StaticResource DisplayFont}"
+                     FontSize="32"
                      FontWeight="Bold"
                      FontStyle="Italic"
                      Foreground="White" />
           <TextBlock Text="Posing"
-                     FontFamily="Ethnocentric"
-                     FontSize="30"
+                     FontFamily="{StaticResource DisplayFont}"
+                     FontSize="32"
                      FontWeight="Bold"
-                     Foreground="#EF4444" />
+                     Foreground="{StaticResource Accent}" />
         </StackPanel>
         <TextBlock Text="Entre com suas credenciais para continuar"
-                   FontSize="12"
-                   Foreground="#44FFFFFF"
+                   FontSize="13"
+                   Foreground="{StaticResource TextSecondary}"
                    HorizontalAlignment="Center"
-                   Margin="0,6,0,0" />
+                   Margin="0,4,0,0" />
       </StackPanel>
 
       <!-- Card -->
       <Border CornerRadius="14"
-              Background="#111111"
-              BorderBrush="#2AEF4444"
+              Background="{StaticResource SurfaceCard}"
+              BorderBrush="{StaticResource AccentBorder}"
               BorderThickness="1"
               ClipToBounds="True">
         <Grid RowDefinitions="3,Auto">
 
-          <!-- Red accent bar at top -->
-          <Border Grid.Row="0" Background="#EF4444" />
+          <Border Grid.Row="0" Background="{StaticResource Accent}" />
 
-          <!-- Form content -->
-          <StackPanel Grid.Row="1" Margin="26,22,26,26" Spacing="16">
+          <StackPanel Grid.Row="1" Margin="28,26,28,28" Spacing="18">
 
-            <!-- Email field -->
-            <StackPanel Spacing="7">
+            <StackPanel Spacing="8">
               <TextBlock Text="EMAIL"
                          FontSize="10"
                          FontWeight="Bold"
-                         Foreground="#66EF4444"
+                         Foreground="{StaticResource TextMuted}"
                          LetterSpacing="2" />
               <TextBox Classes="loginField"
                        Name="EmailBox"
@@ -87,12 +83,11 @@
                        Watermark="seu@email.com" />
             </StackPanel>
 
-            <!-- Password field -->
-            <StackPanel Spacing="7">
+            <StackPanel Spacing="8">
               <TextBlock Text="SENHA"
                          FontSize="10"
                          FontWeight="Bold"
-                         Foreground="#66EF4444"
+                         Foreground="{StaticResource TextMuted}"
                          LetterSpacing="2" />
               <TextBox Classes="loginField"
                        Name="PasswordBox"
@@ -103,25 +98,22 @@
 
             <!-- Error message -->
             <Border Classes="hint"
-                    IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                    Margin="0">
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <Ellipse Width="6" Height="6" Fill="#EF4444" VerticalAlignment="Center" />
+                    IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+              <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Ellipse Width="6" Height="6" Fill="{StaticResource Accent}" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding ErrorMessage}"
                            FontSize="12"
-                           Foreground="#EF4444"
-                           VerticalAlignment="Center" />
+                           Foreground="{StaticResource Accent}"
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap" />
               </StackPanel>
             </Border>
 
-            <!-- Thin divider -->
-            <Border Height="1" Background="#14FFFFFF" Margin="0,2,0,2" />
-
-            <!-- Login button -->
             <Button Classes="loginBtn"
                     Content="{Binding LoginButtonText}"
                     Command="{Binding LoginCommand}"
-                    HorizontalAlignment="Stretch" />
+                    HorizontalAlignment="Stretch"
+                    Margin="0,4,0,0" />
 
           </StackPanel>
         </Grid>
@@ -129,13 +121,14 @@
 
     </StackPanel>
 
-    <!-- ── Bottom footer ────────────────────────────────────────── -->
+    <!-- ── Footer ───────────────────────────────────────────────── -->
     <TextBlock Grid.Row="2"
-               Text="© 2026 Feral Tech Supplies· All rights reserved."
+               Text="© 2026 Feral Tech Supplies · All rights reserved."
                FontSize="10"
-               Foreground="#22FFFFFF"
+               Foreground="{StaticResource TextDisabled}"
                HorizontalAlignment="Center"
-               VerticalAlignment="Center" />
+               VerticalAlignment="Center"
+               LetterSpacing="0.5" />
 
   </Grid>
 </Window>

@@ -1,14 +1,52 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+  <Styles.Resources>
+    <!-- ── Design tokens ─────────────────────────────────────────── -->
+    <!-- Surfaces -->
+    <SolidColorBrush x:Key="SurfaceBase"     Color="#0A0A0A" />
+    <SolidColorBrush x:Key="SurfacePanel"    Color="#0D0D0D" />
+    <SolidColorBrush x:Key="SurfaceElevated" Color="#141414" />
+    <SolidColorBrush x:Key="SurfaceCard"     Color="#111111" />
+
+    <!-- Text — neutral scale (white with alpha, used consistently) -->
+    <SolidColorBrush x:Key="TextPrimary"    Color="#F5FFFFFF" />
+    <SolidColorBrush x:Key="TextSecondary"  Color="#AAFFFFFF" />
+    <SolidColorBrush x:Key="TextMuted"      Color="#66FFFFFF" />
+    <SolidColorBrush x:Key="TextDisabled"   Color="#33FFFFFF" />
+
+    <!-- Accent (proPosing red) -->
+    <Color x:Key="AccentColor">#EF4444</Color>
+    <SolidColorBrush x:Key="Accent"         Color="#EF4444" />
+    <SolidColorBrush x:Key="AccentHover"    Color="#D93333" />
+    <SolidColorBrush x:Key="AccentPressed"  Color="#B91C1C" />
+    <SolidColorBrush x:Key="AccentSoft"     Color="#1FEF4444" /> <!-- fills -->
+    <SolidColorBrush x:Key="AccentBorder"   Color="#3DEF4444" /> <!-- borders -->
+    <SolidColorBrush x:Key="AccentMuted"    Color="#22EF4444" /> <!-- subtle divider -->
+
+    <!-- Dividers -->
+    <SolidColorBrush x:Key="Divider"        Color="#18FFFFFF" />
+    <SolidColorBrush x:Key="DividerStrong"  Color="#28FFFFFF" />
+
+    <!-- Status semantic -->
+    <SolidColorBrush x:Key="StatusSuccess"  Color="#10B981" />
+    <SolidColorBrush x:Key="StatusWarning"  Color="#F59E0B" />
+    <SolidColorBrush x:Key="StatusDanger"   Color="#EF4444" />
+    <SolidColorBrush x:Key="StatusNeutral"  Color="#6B7280" />
+
+    <!-- Font -->
+    <FontFamily x:Key="DisplayFont">avares://ProPosing.Avalonia/Assets/Fonts#Ethnocentric</FontFamily>
+  </Styles.Resources>
+
   <Style Selector="Window">
-    <Setter Property="Background" Value="#0A0A0A" />
-    <Setter Property="Foreground" Value="White" />
+    <Setter Property="Background" Value="{StaticResource SurfaceBase}" />
+    <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
   </Style>
 
   <!-- ── Pose button ────────────────────────────────────────────── -->
+  <!-- Default (unselected) state — selected state below toggles via Classes.selected -->
   <Style Selector="Button.pose">
-    <Setter Property="Height" Value="58" />
+    <Setter Property="Height" Value="54" />
     <Setter Property="HorizontalAlignment" Value="Stretch" />
     <Setter Property="CornerRadius" Value="10" />
     <Setter Property="BorderThickness" Value="1" />
@@ -16,11 +54,12 @@
     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
     <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Background" Value="#121212" />
+    <Setter Property="BorderBrush" Value="#1FFFFFFF" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Button">
           <Panel>
-            <!-- Base: fundo + borda dinâmicos via binding -->
             <Border Name="PART_Border"
                     Background="{TemplateBinding Background}"
                     BorderBrush="{TemplateBinding BorderBrush}"
@@ -32,7 +71,6 @@
                                 VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
                                 Content="{TemplateBinding Content}" />
             </Border>
-            <!-- Overlay de hover/pressed — camada branca translúcida sobre o fundo -->
             <Border Name="PART_Hover"
                     CornerRadius="10"
                     IsHitTestVisible="False"
@@ -48,7 +86,6 @@
       </Setter.Value>
     </Setter>
   </Style>
-  <!-- Suprime o highlight padrão do FluentTheme no ContentPresenter -->
   <Style Selector="Button.pose /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
   </Style>
@@ -59,75 +96,124 @@
     <Setter Property="Background" Value="Transparent" />
   </Style>
   <Style Selector="Button.pose:pointerover /template/ Border#PART_Hover">
-    <Setter Property="Background" Value="#14FFFFFF" />
+    <Setter Property="Background" Value="#10FFFFFF" />
   </Style>
   <Style Selector="Button.pose:pressed /template/ Border#PART_Hover">
-    <Setter Property="Background" Value="#28FFFFFF" />
+    <Setter Property="Background" Value="#20FFFFFF" />
   </Style>
 
-  <!-- ── Panel titles — Ethnocentric, coeso com o logo ─────────── -->
-  <Style Selector="TextBlock.panelTitle">
-    <Setter Property="FontFamily" Value="avares://ProPosing.Avalonia/Assets/Fonts#Ethnocentric" />
-    <Setter Property="FontSize" Value="16" />
-    <Setter Property="FontWeight" Value="Regular" />
+  <!-- Selected state: tinted fill + red border — clear, unambiguous -->
+  <Style Selector="Button.pose.selected">
+    <Setter Property="Background" Value="#1FEF4444" />
+    <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+  </Style>
+
+  <!-- Pose number chip — toggles via selected class on parent button -->
+  <Style Selector="Border.poseChip">
+    <Setter Property="Width" Value="28" />
+    <Setter Property="Height" Value="28" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Background" Value="#0D0D0D" />
+    <Setter Property="BorderBrush" Value="#26FFFFFF" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+  </Style>
+  <Style Selector="Button.pose.selected Border.poseChip">
+    <Setter Property="Background" Value="{StaticResource Accent}" />
+    <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+  </Style>
+  <Style Selector="Border.poseChip > TextBlock">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.pose.selected Border.poseChip > TextBlock">
     <Setter Property="Foreground" Value="White" />
-    <Setter Property="LetterSpacing" Value="1" />
   </Style>
 
+  <Style Selector="Button.pose TextBlock.poseLabel">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="LetterSpacing" Value="0.5" />
+  </Style>
+  <Style Selector="Button.pose.selected TextBlock.poseLabel">
+    <Setter Property="Foreground" Value="White" />
+    <Setter Property="FontWeight" Value="Bold" />
+  </Style>
+
+  <!-- ── Typography ────────────────────────────────────────────── -->
+  <Style Selector="TextBlock.panelTitle">
+    <Setter Property="FontFamily" Value="{StaticResource DisplayFont}" />
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="FontWeight" Value="Regular" />
+    <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+    <Setter Property="LetterSpacing" Value="2" />
+  </Style>
+
+  <Style Selector="TextBlock.caption">
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+    <Setter Property="LetterSpacing" Value="2" />
+  </Style>
+
+  <Style Selector="TextBlock.body">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
+    <Setter Property="LineHeight" Value="20" />
+  </Style>
+
+  <!-- ── Cards ─────────────────────────────────────────────────── -->
   <Style Selector="Border.card">
-    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="CornerRadius" Value="12" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="BorderBrush" Value="#33EF4444" />
-    <Setter Property="Background" Value="#111111" />
+    <Setter Property="BorderBrush" Value="{StaticResource AccentBorder}" />
+    <Setter Property="Background" Value="{StaticResource SurfaceCard}" />
     <Setter Property="Padding" Value="16" />
-  </Style>
-
-  <Style Selector="Border.statCard">
-    <Setter Property="CornerRadius" Value="10" />
-    <Setter Property="Background" Value="#111111" />
-    <Setter Property="BorderBrush" Value="#2AEF4444" />
-    <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="Padding" Value="12,14" />
   </Style>
 
   <Style Selector="Border.hint">
     <Setter Property="CornerRadius" Value="8" />
-    <Setter Property="Background" Value="#1A0000" />
-    <Setter Property="BorderBrush" Value="#33EF4444" />
+    <Setter Property="Background" Value="#14EF4444" />
+    <Setter Property="BorderBrush" Value="#2EEF4444" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="Padding" Value="12,8" />
-    <Setter Property="Margin" Value="0,0,0,6" />
+    <Setter Property="Padding" Value="12,10" />
+    <Setter Property="Margin" Value="0" />
   </Style>
 
   <!-- ── Login fields ─────────────────────────────────────────── -->
   <Style Selector="TextBox.loginField">
     <Setter Property="Background" Value="#0D0D0D" />
-    <Setter Property="Foreground" Value="White" />
-    <Setter Property="BorderBrush" Value="#33EF4444" />
+    <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+    <Setter Property="BorderBrush" Value="#26FFFFFF" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="8" />
-    <Setter Property="Padding" Value="12,10" />
+    <Setter Property="Padding" Value="14,12" />
     <Setter Property="FontSize" Value="14" />
     <Setter Property="SelectionBrush" Value="#44EF4444" />
-    <Setter Property="CaretBrush" Value="#EF4444" />
-    <Setter Property="MinHeight" Value="44" />
+    <Setter Property="CaretBrush" Value="{StaticResource Accent}" />
+    <Setter Property="MinHeight" Value="46" />
   </Style>
   <Style Selector="TextBox.loginField:pointerover">
-    <Setter Property="BorderBrush" Value="#55EF4444" />
+    <Setter Property="BorderBrush" Value="#44FFFFFF" />
   </Style>
   <Style Selector="TextBox.loginField:focus">
-    <Setter Property="BorderBrush" Value="#99EF4444" />
+    <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
     <Setter Property="Background" Value="#151515" />
   </Style>
 
   <!-- ── Login button ─────────────────────────────────────────── -->
   <Style Selector="Button.loginBtn">
-    <Setter Property="Background" Value="#EF4444" />
+    <Setter Property="Background" Value="{StaticResource Accent}" />
     <Setter Property="Foreground" Value="White" />
-    <Setter Property="BorderBrush" Value="#CC2222" />
-    <Setter Property="BorderThickness" Value="0,0,0,3" />
+    <Setter Property="BorderThickness" Value="0" />
     <Setter Property="CornerRadius" Value="8" />
-    <Setter Property="Height" Value="50" />
+    <Setter Property="Height" Value="48" />
     <Setter Property="FontSize" Value="13" />
     <Setter Property="FontWeight" Value="Bold" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -135,10 +221,10 @@
     <Setter Property="Cursor" Value="Hand" />
   </Style>
   <Style Selector="Button.loginBtn:pointerover /template/ ContentPresenter">
-    <Setter Property="Background" Value="#D93333" />
+    <Setter Property="Background" Value="{StaticResource AccentHover}" />
   </Style>
   <Style Selector="Button.loginBtn:pressed /template/ ContentPresenter">
-    <Setter Property="Background" Value="#B91C1C" />
+    <Setter Property="Background" Value="{StaticResource AccentPressed}" />
   </Style>
   <Style Selector="Button.loginBtn:disabled /template/ ContentPresenter">
     <Setter Property="Background" Value="#3D1010" />

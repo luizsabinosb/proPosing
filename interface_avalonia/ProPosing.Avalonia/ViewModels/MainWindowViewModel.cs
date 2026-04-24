@@ -88,6 +88,16 @@ public partial class MainWindowViewModel : ObservableObject
         _cameraPipelineService.FrameReady      += OnFrameReady;
         _cameraPipelineService.Error           += OnPipelineError;
         _cameraPipelineService.StatusUpdate    += OnPipelineStatus;
+
+        UpdatePoseSelectionFlags();
+    }
+
+    private void UpdatePoseSelectionFlags()
+    {
+        foreach (var p in Poses)
+        {
+            p.IsSelected = string.Equals(p.Mode, SelectedPoseMode, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     public ObservableCollection<PoseOption> Poses { get; }
@@ -246,6 +256,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     partial void OnSelectedPoseModeChanged(string value)
     {
+        UpdatePoseSelectionFlags();
         _ = TransitionReferenceImageAsync(value);
     }
 
