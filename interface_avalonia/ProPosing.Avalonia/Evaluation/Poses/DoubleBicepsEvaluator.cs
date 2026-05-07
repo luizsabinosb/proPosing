@@ -4,8 +4,8 @@ using static ProPosing.Avalonia.Evaluation.GeometryHelper;
 namespace ProPosing.Avalonia.Evaluation.Poses;
 
 /// <summary>
-/// Double Biceps: facing camera front-on, both arms raised with elbows at shoulder height,
-/// spread wide, flexed at 60–80°, wrists curled inward/upward.
+/// Double Biceps: front-on, both arms raised with elbows at shoulder height,
+/// flexed ~30–80°, elbows spread beyond shoulder width.
 /// </summary>
 public sealed class DoubleBicepsEvaluator : IPoseEvaluator
 {
@@ -16,61 +16,62 @@ public sealed class DoubleBicepsEvaluator : IPoseEvaluator
 
     public string PoseMode => "double_biceps";
 
-    public PoseFeedback Evaluate(IReadOnlyList<LandmarkPoint> lms)
+    public PoseFeedback Evaluate(PoseContext ctx)
     {
+        var lms = ctx.Landmarks;
         var ls = lms[Idx.LeftShoulder];  var rs = lms[Idx.RightShoulder];
         var le = lms[Idx.LeftElbow];     var re = lms[Idx.RightElbow];
         var lw = lms[Idx.LeftWrist];     var rw = lms[Idx.RightWrist];
 
-        bool leftOk  = IsVisible(ls) && IsVisible(le) && IsVisible(lw);
-        bool rightOk = IsVisible(rs) && IsVisible(re) && IsVisible(rw);
+        // Orientation-gated: reject back views entirely, nudge 3/4 → front.
+        if (ctx.View == BodyView.Back)
+            return new PoseFeedback("incorrect", "Vire de frente para a câmera", []);
 
+        bool leftOk  = AllReliable(ls, le, lw);
+        bool rightOk = AllReliable(rs, re, rw);
         if (!leftOk && !rightOk)
             return new PoseFeedback("incorrect", "Braços não detectados — verifique o enquadramento", []);
 
+        double torso = ctx.TorsoLength;
+        if (torso < 1e-6) torso = ctx.ShoulderSpan > 1e-6 ? ctx.ShoulderSpan : 1.0;
+
         var errors = new List<string>();
 
-        // ── 1. Cotovelos elevados (na altura dos ombros) ──────────────
-        if (leftOk && le.Y > ls.Y + _t.ElbowAboveShoulderTolerance)
+        // 1. Elbows at shoulder height — drop normalized by torso.
+        if (leftOk && VerticalGap(ls, le, ctx.Aspect) / torso > _t.ElbowDropRatioMax)
             errors.Add("Eleve o cotovelo esquerdo até a altura do ombro");
-        if (rightOk && re.Y > rs.Y + _t.ElbowAboveShoulderTolerance)
+        if (rightOk && VerticalGap(rs, re, ctx.Aspect) / torso > _t.ElbowDropRatioMax)
             errors.Add("Eleve o cotovelo direito até a altura do ombro");
 
-        // ── 2. Ângulo de flexão dos braços ────────────────────────────
-        if (leftOk)
+        // 2. Flex angles (3D so profile rotation doesn't collapse the arm).
+        if (leftOk) CheckFlex(errors, "esquerdo", Angle3D(ls, le, lw, ctx.Aspect));
+        if (rightOk) CheckFlex(errors, "direito", Angle3D(rs, re, rw, ctx.Aspect));
+
+        // 3. Elbow spread vs shoulder span — ratio, aspect-correct.
+        if (leftOk && rightOk && ctx.ShoulderSpan > 1e-6)
         {
-            double angle = Angle(ls, le, lw);
-            if (angle < _t.ElbowMinAngle)
-                errors.Add($"Braço esquerdo muito fechado — abra para {_t.ElbowMinAngle}–{_t.ElbowMaxAngle}° (atual: {angle:F0}°)");
-            else if (angle > _t.ElbowMaxAngle)
-                errors.Add($"Braço esquerdo muito aberto — feche para {_t.ElbowMinAngle}–{_t.ElbowMaxAngle}° (atual: {angle:F0}°)");
-        }
-        if (rightOk)
-        {
-            double angle = Angle(rs, re, rw);
-            if (angle < _t.ElbowMinAngle)
-                errors.Add($"Braço direito muito fechado — abra para {_t.ElbowMinAngle}–{_t.ElbowMaxAngle}° (atual: {angle:F0}°)");
-            else if (angle > _t.ElbowMaxAngle)
-                errors.Add($"Braço direito muito aberto — feche para {_t.ElbowMinAngle}–{_t.ElbowMaxAngle}° (atual: {angle:F0}°)");
+            double elbowSpan = Distance2D(le, re, ctx.Aspect);
+            if (elbowSpan / ctx.ShoulderSpan < _t.ElbowSpreadMinRatio)
+                errors.Add("Abra mais os cotovelos para os lados — braços bem abertos");
         }
 
-        // ── 3. Cotovelos abertos (não colados ao tronco) ──────────────
-        if (leftOk && rightOk && IsVisible(ls) && IsVisible(rs))
-        {
-            double shoulderSpan = Math.Abs(ls.X - rs.X);
-            double elbowSpan    = Math.Abs(le.X - re.X);
-            if (shoulderSpan > 0 && elbowSpan < shoulderSpan * _t.ElbowSpreadMinRatio)
-                errors.Add("Abra mais os cotovelos para os lados — braços devem estar bem abertos");
-        }
-
-        // ── 4. Simetria dos cotovelos ─────────────────────────────────
+        // 4. Elbow-height symmetry — torso-normalized.
         if (leftOk && rightOk)
         {
-            double elbowAsymmetry = Math.Abs(le.Y - re.Y);
-            if (elbowAsymmetry > _t.ElbowAsymmetryMax)
+            double asym = Math.Abs(le.Y - re.Y) * ctx.Aspect / torso;
+            if (asym > _t.ElbowAsymmetryRatio)
                 errors.Add("Alinhe os cotovelos — um lado está mais baixo que o outro");
         }
 
         return PoseFeedback.FromErrors(errors, "Excelente duplo bíceps! Bíceps bem definidos e simétricos.");
+    }
+
+    private void CheckFlex(List<string> errors, string side, double angle)
+    {
+        if (double.IsNaN(angle)) return;
+        if (angle < _t.ElbowMinAngle)
+            errors.Add($"Braço {side} muito fechado — abra para {_t.ElbowMinAngle}–{_t.ElbowMaxAngle}° (atual: {angle:F0}°)");
+        else if (angle > _t.ElbowMaxAngle)
+            errors.Add($"Braço {side} muito aberto — feche para {_t.ElbowMinAngle}–{_t.ElbowMaxAngle}° (atual: {angle:F0}°)");
     }
 }

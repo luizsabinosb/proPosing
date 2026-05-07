@@ -4,7 +4,7 @@ using static ProPosing.Avalonia.Evaluation.GeometryHelper;
 namespace ProPosing.Avalonia.Evaluation.Poses;
 
 /// <summary>
-/// Front Lat Spread: front-facing, elbows bent and pulled wide/down below shoulder level,
+/// Front Lat Spread: front-facing, elbows pulled wide and slightly down,
 /// hands near waist/hip, lats maximally expanded.
 /// </summary>
 public sealed class FrontLatSpreadEvaluator : IPoseEvaluator
@@ -16,76 +16,76 @@ public sealed class FrontLatSpreadEvaluator : IPoseEvaluator
 
     public string PoseMode => "front_lat_spread";
 
-    public PoseFeedback Evaluate(IReadOnlyList<LandmarkPoint> lms)
+    public PoseFeedback Evaluate(PoseContext ctx)
     {
+        if (ctx.View == BodyView.Back)
+            return new PoseFeedback("incorrect", "Vire de frente para a câmera", []);
+
+        var lms = ctx.Landmarks;
         var ls = lms[Idx.LeftShoulder];  var rs = lms[Idx.RightShoulder];
         var le = lms[Idx.LeftElbow];     var re = lms[Idx.RightElbow];
         var lw = lms[Idx.LeftWrist];     var rw = lms[Idx.RightWrist];
         var lh = lms[Idx.LeftHip];       var rh = lms[Idx.RightHip];
 
-        if (!IsVisible(ls) || !IsVisible(rs))
+        if (!AllReliable(ls, rs))
             return new PoseFeedback("incorrect", "Ombros não visíveis — ajuste o enquadramento", []);
 
+        double torso = Math.Max(ctx.TorsoLength, 1e-6);
         var errors = new List<string>();
 
-        double shoulderSpan = Math.Abs(ls.X - rs.X);
-
-        // ── 1. Cotovelos abertos além dos ombros (lats expandidos) ────
-        if (IsVisible(le) && IsVisible(re) && shoulderSpan > 0)
+        // 1. Elbows spread wider than shoulders.
+        if (AllReliable(le, re) && ctx.ShoulderSpan > 1e-6)
         {
-            double elbowSpan = Math.Abs(le.X - re.X);
-            if (elbowSpan < shoulderSpan * _t.ElbowSpreadMinRatio)
+            double elbowSpan = Distance2D(le, re, ctx.Aspect);
+            if (elbowSpan / ctx.ShoulderSpan < _t.ElbowSpreadMinRatio)
                 errors.Add("Abra mais os cotovelos — expanda os lats ao máximo para os lados");
         }
 
-        // ── 2. Cotovelos abaixo (ou na altura) dos ombros ─────────────
-        // Na front lat spread, cotovelos ficam na altura do ombro ou levemente abaixo
-        if (IsVisible(ls) && IsVisible(le))
+        // 2. Elbows not above shoulders.
+        if (AllReliable(ls, le))
         {
-            if (le.Y < ls.Y - _t.ElbowAboveShoulderMax)
+            double rise = -VerticalGap(le, ls, ctx.Aspect) / torso; // positive if elbow above shoulder
+            if (rise > _t.ElbowRiseRatioMax)
                 errors.Add("Cotovelo esquerdo acima do ombro — abaixe para o nível do ombro");
         }
-        if (IsVisible(rs) && IsVisible(re))
+        if (AllReliable(rs, re))
         {
-            if (re.Y < rs.Y - _t.ElbowAboveShoulderMax)
+            double rise = -VerticalGap(re, rs, ctx.Aspect) / torso;
+            if (rise > _t.ElbowRiseRatioMax)
                 errors.Add("Cotovelo direito acima do ombro — abaixe para o nível do ombro");
         }
 
-        // ── 3. Ângulo de flexão dos cotovelos ─────────────────────────
-        if (IsVisible(ls) && IsVisible(le) && IsVisible(lw))
-        {
-            double angle = Angle(ls, le, lw);
-            if (angle < _t.ElbowMinAngle)
-                errors.Add($"Cotovelo esquerdo muito fechado — abra para {_t.ElbowMinAngle}–{_t.ElbowMaxAngle}° (atual: {angle:F0}°)");
-            else if (angle > _t.ElbowMaxAngle)
-                errors.Add($"Cotovelo esquerdo muito aberto — feche para {_t.ElbowMinAngle}–{_t.ElbowMaxAngle}° (atual: {angle:F0}°)");
-        }
-        if (IsVisible(rs) && IsVisible(re) && IsVisible(rw))
-        {
-            double angle = Angle(rs, re, rw);
-            if (angle < _t.ElbowMinAngle)
-                errors.Add($"Cotovelo direito muito fechado — abra para {_t.ElbowMinAngle}–{_t.ElbowMaxAngle}° (atual: {angle:F0}°)");
-            else if (angle > _t.ElbowMaxAngle)
-                errors.Add($"Cotovelo direito muito aberto — feche para {_t.ElbowMinAngle}–{_t.ElbowMaxAngle}° (atual: {angle:F0}°)");
-        }
+        // 3. Elbow flex angle.
+        if (AllReliable(ls, le, lw)) CheckFlex(errors, "esquerdo", Angle3D(ls, le, lw, ctx.Aspect));
+        if (AllReliable(rs, re, rw)) CheckFlex(errors, "direito",  Angle3D(rs, re, rw, ctx.Aspect));
 
-        // ── 4. Simetria dos cotovelos ─────────────────────────────────
-        if (IsVisible(le) && IsVisible(re))
+        // 4. Elbow symmetry (torso-normalized).
+        if (AllReliable(le, re))
         {
-            double asymmetry = Math.Abs(le.Y - re.Y);
-            if (asymmetry > _t.ElbowAsymmetryMax)
+            double asym = Math.Abs(le.Y - re.Y) * ctx.Aspect / torso;
+            if (asym > _t.ElbowAsymmetryRatio)
                 errors.Add("Mantenha os cotovelos na mesma altura — um lado está desequilibrado");
         }
 
-        // ── 5. Punhos na zona da cintura/quadril ──────────────────────
-        if (IsVisible(lh) && IsVisible(rh) && IsVisible(lw) && IsVisible(rw))
+        // 5. Wrists near the hip band (fixed: compare to hips, not shoulders).
+        if (AllReliable(lh, rh, lw, rw))
         {
-            double hipY = (lh.Y + rh.Y) / 2.0;
-            double wristMidY = (lw.Y + rw.Y) / 2.0;
-            if (wristMidY < (ls.Y + rs.Y) / 2.0 - 0.05)
-                errors.Add("Traga os punhos para a região da cintura — não levante os braços");
+            double hipY   = (lh.Y + rh.Y) / 2.0;
+            double wristY = (lw.Y + rw.Y) / 2.0;
+            double deviation = Math.Abs(wristY - hipY) * ctx.Aspect / torso;
+            if (deviation > _t.WristHipRatioTolerance)
+                errors.Add("Traga os punhos para a região da cintura — mãos na altura do quadril");
         }
 
         return PoseFeedback.FromErrors(errors, "Excelente front lat spread! Lats bem expandidos.");
+    }
+
+    private void CheckFlex(List<string> errors, string side, double angle)
+    {
+        if (double.IsNaN(angle)) return;
+        if (angle < _t.ElbowMinAngle)
+            errors.Add($"Cotovelo {side} muito fechado — {_t.ElbowMinAngle}–{_t.ElbowMaxAngle}° (atual: {angle:F0}°)");
+        else if (angle > _t.ElbowMaxAngle)
+            errors.Add($"Cotovelo {side} muito aberto — {_t.ElbowMinAngle}–{_t.ElbowMaxAngle}° (atual: {angle:F0}°)");
     }
 }

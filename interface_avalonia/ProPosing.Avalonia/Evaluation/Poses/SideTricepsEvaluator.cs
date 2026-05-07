@@ -4,8 +4,8 @@ using static ProPosing.Avalonia.Evaluation.GeometryHelper;
 namespace ProPosing.Avalonia.Evaluation.Poses;
 
 /// <summary>
-/// Side Triceps: body in ~85–90° side profile, both arms pulled DOWN beside the torso,
-/// posterior arm fully extended with wrist at hip/thigh level to showcase the triceps.
+/// Side Triceps: ~85–90° side profile, posterior arm fully extended
+/// with wrist at hip/thigh level to showcase the triceps.
 /// </summary>
 public sealed class SideTricepsEvaluator : IPoseEvaluator
 {
@@ -16,77 +16,70 @@ public sealed class SideTricepsEvaluator : IPoseEvaluator
 
     public string PoseMode => "side_triceps";
 
-    public PoseFeedback Evaluate(IReadOnlyList<LandmarkPoint> lms)
+    public PoseFeedback Evaluate(PoseContext ctx)
     {
-        var nose = lms[Idx.Nose];
-        var ls   = lms[Idx.LeftShoulder];  var rs = lms[Idx.RightShoulder];
-        var le   = lms[Idx.LeftElbow];     var re = lms[Idx.RightElbow];
-        var lw   = lms[Idx.LeftWrist];     var rw = lms[Idx.RightWrist];
-        var lk   = lms[Idx.LeftKnee];      var rk = lms[Idx.RightKnee];
-        var lh   = lms[Idx.LeftHip];       var rh = lms[Idx.RightHip];
-        var la   = lms[Idx.LeftAnkle];     var ra = lms[Idx.RightAnkle];
-
-        // ── 1. Perfil lateral obrigatório ──────────────────────────────
-        // Nariz claramente visível → usuário está de frente para a câmera
-        if (IsVisible(nose, _t.NoseMaxVisibility))
+        if (ctx.View != BodyView.Side)
             return new PoseFeedback("incorrect", "Vire completamente de lado para a câmera", []);
 
-        // Quadris visíveis e largos → tronco ainda de frente
-        if (IsVisible(lh) && IsVisible(rh))
-        {
-            double hipWidth = Math.Abs(lh.X - rh.X);
-            if (hipWidth > _t.HipWidthMax)
-                return new PoseFeedback("incorrect", "Gire o tronco completamente de lado (~85–90°)", []);
-        }
+        var lms = ctx.Landmarks;
+        var ls = lms[Idx.LeftShoulder];  var rs = lms[Idx.RightShoulder];
+        var le = lms[Idx.LeftElbow];     var re = lms[Idx.RightElbow];
+        var lw = lms[Idx.LeftWrist];     var rw = lms[Idx.RightWrist];
+        var lh = lms[Idx.LeftHip];       var rh = lms[Idx.RightHip];
+        var lk = lms[Idx.LeftKnee];      var rk = lms[Idx.RightKnee];
+        var la = lms[Idx.LeftAnkle];     var ra = lms[Idx.RightAnkle];
 
-        bool leftOk  = IsVisible(ls) && IsVisible(le) && IsVisible(lw);
-        bool rightOk = IsVisible(rs) && IsVisible(re) && IsVisible(rw);
-
+        bool leftOk  = AllReliable(ls, le, lw);
+        bool rightOk = AllReliable(rs, re, rw);
         if (!leftOk && !rightOk)
             return new PoseFeedback("incorrect", "Braços não detectados — verifique o enquadramento", []);
 
-        // ── 2. Braço posterior (mais estendido = mostrando tríceps) ───
-        double leftAngle  = leftOk  ? Angle(ls, le, lw) : double.MinValue;
-        double rightAngle = rightOk ? Angle(rs, re, rw) : double.MinValue;
+        // Posterior arm = the one further from camera (larger z) AND the more extended.
+        // Use z as primary signal; fall back to extension if z is ambiguous.
+        bool useLeft = PickBackByZ(ls, rs, leftOk, rightOk);
+        var (ps, pe, pw) = useLeft ? (ls, le, lw) : (rs, re, rw);
+        if (useLeft ? !leftOk : !rightOk)
+            return new PoseFeedback("incorrect", "Braço posterior não detectado", []);
 
-        bool useLeft = leftAngle >= rightAngle && leftOk;
-        var (postShoulder, postElbow, postWrist) = useLeft
-            ? (ls, le, lw) : (rs, re, rw);
-        double postAngle = useLeft ? leftAngle : rightAngle;
-
+        double torso = Math.Max(ctx.TorsoLength, 1e-6);
         var errors = new List<string>();
 
-        // ── 3. Braço deve estar bem estendido (tríceps alongado) ──────
-        if (postAngle < _t.ArmMinAngle)
-            errors.Add($"Estenda mais o braço — tríceps deve estar quase reto (atual: {postAngle:F0}°)");
+        // 1. Arm extension (close to straight). Use 3D to avoid profile collapse.
+        double armAngle = Angle3D(ps, pe, pw, ctx.Aspect);
+        if (!double.IsNaN(armAngle) && armAngle < _t.ArmMinAngle)
+            errors.Add($"Estenda mais o braço — tríceps deve estar quase reto (atual: {armAngle:F0}°)");
 
-        // ── 4. Braço apontando para BAIXO — cotovelo abaixo do ombro ──
-        // Y maior = mais baixo na imagem; cotovelo deve estar abaixo do ombro
-        if (postElbow.Y < postShoulder.Y + _t.ElbowBelowShoulderMin)
+        // 2. Elbow must be clearly below shoulder — ratio to torso.
+        double elbowBelow = VerticalGap(ps, pe, ctx.Aspect) / torso;
+        if (elbowBelow < _t.ElbowBelowShoulderRatioMin)
             errors.Add("Abaixe o braço — cotovelo deve estar abaixo do ombro, apontando para baixo");
 
-        // ── 5. Pulso na altura do quadril (braço puxado para baixo) ───
-        if (IsVisible(lh) || IsVisible(rh))
+        // 3. Wrist near the near hip (Z-selected), not an arbitrary visible one.
+        var nearHip = lh.Z <= rh.Z ? lh : rh;
+        if (IsReliable(nearHip))
         {
-            double hipY = IsVisible(lh) ? lh.Y : rh.Y;
-            if (postWrist.Y < hipY - _t.WristHipYTolerance)
+            double wristOverHip = -VerticalGap(nearHip, pw, ctx.Aspect) / torso; // positive if wrist above hip
+            if (wristOverHip > _t.WristHipRatioTolerance)
                 errors.Add("Puxe o braço para baixo — pulso deve estar na altura do quadril");
         }
 
-        // ── 6. Cotovelo não deve estar acima do ombro ─────────────────
-        if (postElbow.Y < postShoulder.Y - _t.ElbowAboveShoulderMax)
-            errors.Add("Cotovelo muito acima do ombro — abaixe o braço completamente");
-
-        // ── 7. Joelho da perna frontal estendido ──────────────────────
-        bool kneeLeftOk  = IsVisible(lk) && IsVisible(lh) && IsVisible(la);
-        bool kneeRightOk = IsVisible(rk) && IsVisible(rh) && IsVisible(ra);
-        if (kneeLeftOk || kneeRightOk)
+        // 4. Front leg extended. Near leg = leg whose hip has smaller z.
+        bool leftLegIsFront = lh.Z <= rh.Z;
+        var (h, k, a) = leftLegIsFront ? (lh, lk, la) : (rh, rk, ra);
+        if (AllReliable(h, k, a))
         {
-            double kneeAngle = kneeLeftOk ? Angle(lh, lk, la) : Angle(rh, rk, ra);
-            if (kneeAngle < _t.KneeMinAngle)
+            double kneeAngle = Angle3D(h, k, a, ctx.Aspect);
+            if (!double.IsNaN(kneeAngle) && kneeAngle < _t.KneeMinAngle)
                 errors.Add($"Estenda a perna frontal (~180°) (atual: {kneeAngle:F0}°)");
         }
 
         return PoseFeedback.FromErrors(errors, "Excelente side triceps! Tríceps bem estendido e destacado.");
+    }
+
+    private static bool PickBackByZ(LandmarkPoint ls, LandmarkPoint rs, bool leftOk, bool rightOk)
+    {
+        if (leftOk && !rightOk) return true;
+        if (rightOk && !leftOk) return false;
+        return ls.Z >= rs.Z;
     }
 }

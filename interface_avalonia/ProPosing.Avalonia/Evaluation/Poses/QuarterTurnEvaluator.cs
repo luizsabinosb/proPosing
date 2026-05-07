@@ -16,68 +16,57 @@ public sealed class QuarterTurnEvaluator : IPoseEvaluator
 
     public string PoseMode => "quarter_turn_side";
 
-    public PoseFeedback Evaluate(IReadOnlyList<LandmarkPoint> lms)
+    public PoseFeedback Evaluate(PoseContext ctx)
     {
-        var nose = lms[Idx.Nose];
-        var ls   = lms[Idx.LeftShoulder];  var rs = lms[Idx.RightShoulder];
-        var le   = lms[Idx.LeftElbow];     var re = lms[Idx.RightElbow];
-        var lw   = lms[Idx.LeftWrist];     var rw = lms[Idx.RightWrist];
-        var lh   = lms[Idx.LeftHip];       var rh = lms[Idx.RightHip];
-        var lk   = lms[Idx.LeftKnee];      var rk = lms[Idx.RightKnee];
-        var la   = lms[Idx.LeftAnkle];     var ra = lms[Idx.RightAnkle];
+        if (ctx.View != BodyView.Side)
+            return new PoseFeedback("incorrect", "Vire completamente de lado — perfil de 90°", []);
 
-        // ── 1. Perfil lateral obrigatório (90°) ───────────────────────
-        if (IsVisible(nose, _t.NoseMaxVisibility))
-            return new PoseFeedback("incorrect", "Vire completamente de lado — quarter turn é 90° de perfil", []);
+        var lms = ctx.Landmarks;
+        var ls = lms[Idx.LeftShoulder];  var rs = lms[Idx.RightShoulder];
+        var le = lms[Idx.LeftElbow];     var re = lms[Idx.RightElbow];
+        var lw = lms[Idx.LeftWrist];     var rw = lms[Idx.RightWrist];
+        var lh = lms[Idx.LeftHip];       var rh = lms[Idx.RightHip];
+        var lk = lms[Idx.LeftKnee];      var rk = lms[Idx.RightKnee];
+        var la = lms[Idx.LeftAnkle];     var ra = lms[Idx.RightAnkle];
 
-        if (IsVisible(ls) && IsVisible(rs))
-        {
-            double span = Math.Abs(ls.X - rs.X);
-            if (span > _t.ShoulderSpanMax)
-                return new PoseFeedback("incorrect", "Gire o corpo de lado — posição de perfil completo", []);
-        }
+        bool leftOk  = AllReliable(ls, le, lw);
+        bool rightOk = AllReliable(rs, re, rw);
 
-        // ── 2. Determinar braço frontal (maior X = mais perto da câmera) ─
-        bool leftOk  = IsVisible(ls) && IsVisible(le) && IsVisible(lw);
-        bool rightOk = IsVisible(rs) && IsVisible(re) && IsVisible(rw);
-
-        bool leftIsFront = IsVisible(ls) && IsVisible(rs) && ls.X > rs.X;
-        var (frontShoulder, frontElbow, frontWrist) = leftIsFront ? (ls, le, lw) : (rs, re, rw);
-        var (backShoulder,  backElbow,  backWrist)  = leftIsFront ? (rs, re, rw) : (ls, le, lw);
-        bool frontOk = leftIsFront ? leftOk  : rightOk;
+        // Front arm = nearer shoulder (lower z). Stable in true profile where X collapses.
+        bool leftIsFront = IsReliable(ls) && IsReliable(rs) ? ls.Z <= rs.Z : leftOk;
+        var (fs, fe, fw) = leftIsFront ? (ls, le, lw) : (rs, re, rw);
+        var (bs, be, bw) = leftIsFront ? (rs, re, rw) : (ls, le, lw);
+        bool frontOk = leftIsFront ? leftOk : rightOk;
         bool backOk  = leftIsFront ? rightOk : leftOk;
 
         var errors = new List<string>();
 
-        // ── 3. Braço frontal: dobrado ~90° na cintura ─────────────────
         if (frontOk)
         {
-            double angle = Angle(frontShoulder, frontElbow, frontWrist);
-            if (angle < _t.FrontElbowMinAngle)
-                errors.Add($"Braço frontal muito fechado — abra para {_t.FrontElbowMinAngle}–{_t.FrontElbowMaxAngle}° (atual: {angle:F0}°)");
-            else if (angle > _t.FrontElbowMaxAngle)
-                errors.Add($"Braço frontal muito aberto — feche para {_t.FrontElbowMinAngle}–{_t.FrontElbowMaxAngle}° (atual: {angle:F0}°)");
+            double angle = Angle3D(fs, fe, fw, ctx.Aspect);
+            if (!double.IsNaN(angle))
+            {
+                if (angle < _t.FrontElbowMinAngle)
+                    errors.Add($"Braço frontal muito fechado — {_t.FrontElbowMinAngle}–{_t.FrontElbowMaxAngle}° (atual: {angle:F0}°)");
+                else if (angle > _t.FrontElbowMaxAngle)
+                    errors.Add($"Braço frontal muito aberto — {_t.FrontElbowMinAngle}–{_t.FrontElbowMaxAngle}° (atual: {angle:F0}°)");
+            }
         }
 
-        // ── 4. Braço traseiro mais estendido ──────────────────────────
         if (backOk)
         {
-            double angle = Angle(backShoulder, backElbow, backWrist);
-            if (angle < _t.BackArmMinAngle)
+            double angle = Angle3D(bs, be, bw, ctx.Aspect);
+            if (!double.IsNaN(angle) && angle < _t.BackArmMinAngle)
                 errors.Add($"Estenda mais o braço traseiro (atual: {angle:F0}°)");
         }
 
-        // ── 5. Joelhos razoavelmente estendidos ───────────────────────
-        if (IsVisible(lh) && IsVisible(lk) && IsVisible(la))
+        // Front leg is the leg whose hip z is smaller (near hip). Check whichever is reliable.
+        bool leftLegIsFront = IsReliable(lh) && IsReliable(rh) ? lh.Z <= rh.Z : IsReliable(lh);
+        var (h, k, a) = leftLegIsFront ? (lh, lk, la) : (rh, rk, ra);
+        if (AllReliable(h, k, a))
         {
-            double angle = Angle(lh, lk, la);
-            if (angle < _t.KneeMinAngle)
-                errors.Add($"Estenda mais a perna ({angle:F0}°)");
-        }
-        else if (IsVisible(rh) && IsVisible(rk) && IsVisible(ra))
-        {
-            double angle = Angle(rh, rk, ra);
-            if (angle < _t.KneeMinAngle)
+            double angle = Angle3D(h, k, a, ctx.Aspect);
+            if (!double.IsNaN(angle) && angle < _t.KneeMinAngle)
                 errors.Add($"Estenda mais a perna ({angle:F0}°)");
         }
 

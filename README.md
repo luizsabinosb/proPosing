@@ -1,221 +1,260 @@
 # ProPosing
 
-Sistema de análise de poses de fisiculturismo em tempo real com visão computacional e Machine Learning.
+Sistema de análise de poses de fisiculturismo em tempo real, com avaliação geométrica baseada em landmarks 3D do MediaPipe.
+
+A interface roda 100% nativa em desktop (Avalonia / .NET 8) e a estimativa de pose é feita por um sidecar Python (MediaPipe) embarcado no bundle final — sem servidor HTTP, sem dependências de runtime na máquina do usuário.
 
 ---
 
-## 📌 Visão Geral
-
-O projeto é dividido em **dois componentes** que se comunicam via API REST:
-
-1. **Backend** (Python/FastAPI) — Processa frames da câmera com MediaPipe, avalia poses e retorna landmarks e feedback
-2. **Interface** (Avalonia UI) — Exibe a câmera, envia frames para o backend e mostra o esqueleto + avaliação em tempo real
-
-**Fluxo:** Câmera → Interface captura frame → Envia Base64 ao backend → Backend processa com MediaPipe → Retorna landmarks + status → Interface desenha overlay e feedback.
-
----
-
-## ✅ Pré-requisitos
-
-| Requisito | Uso |
-|-----------|-----|
-| **Python 3.10+** | Backend |
-| **.NET SDK 8+** | Interface Avalonia |
-| **Chrome** | Para rodar na web |
-
----
-
-## 📁 Estrutura do Projeto
+## Arquitetura
 
 ```
-ProPosing/
-├── backend/                 # API REST - processamento de imagens
-│   ├── app/
-│   │   ├── main.py          # App FastAPI, rotas, CORS
-│   │   ├── api/v1/pose.py   # Endpoints /api/v1/pose/evaluate e /select
-│   │   ├── core/cv_service.py  # MediaPipe, regras de avaliação, ML
-│   │   └── models/pose.py   # Schemas Pydantic (request/response)
-│   ├── requirements.txt
-│   └── run_standalone.py    # Launcher para app empacotado
+┌─────────────────────────────────┐         stdin (frames JPEG)
+│   Avalonia UI  (.NET 8 / C#)    │ ──────────────────────────► ┌──────────────────────────┐
+│                                 │                             │  MediaPipe Sidecar       │
+│  • OpenCvSharp captura câmera   │                             │  (Python / PyInstaller)  │
+│  • Pipeline de inferência       │                             │  • mediapipe.solutions.pose
+│  • Renderização do esqueleto    │ ◄────────────────────────── │  • emite landmarks JSON  │
+│  • Avaliação geométrica das     │         stdout (landmarks)  │                          │
+│    poses (PoseEvaluator*)       │                             └──────────────────────────┘
+│  • UI: feedback + métricas      │
+└─────────────────────────────────┘
+```
+
+- **Avalonia UI**: tudo que o usuário vê e interage. Faz captura de câmera, gerencia o ciclo de inferência (uma chamada a cada N frames), renderiza o esqueleto sobreposto e roda a avaliação geométrica em C#.
+- **Sidecar MediaPipe**: processo filho lançado pela UI. Recebe frames pelo `stdin`, devolve landmarks normalizados pelo `stdout`. PyInstaller (`--onedir`) congela todas as dependências Python em um bundle dentro do `.app`.
+
+A comunicação é binária + JSON (sem rede). O sidecar é o único componente Python — toda a lógica de avaliação foi reescrita em C#.
+
+---
+
+## Stack
+
+| Camada | Tecnologia |
+|---|---|
+| UI / desktop | Avalonia 11.1, .NET 8, CommunityToolkit.Mvvm |
+| Captura de câmera | OpenCvSharp 4.13 (AVFoundation no macOS) |
+| Estimativa de pose | MediaPipe `solutions.pose`, model_complexity=0 (Lite) |
+| Empacotamento sidecar | PyInstaller (`--onedir`) |
+| Build do app | `dotnet publish` self-contained + bundle `.app` |
+| Plataforma alvo | macOS arm64 (primário), Windows x64 e Linux x64 também publicáveis |
+
+---
+
+## Estrutura do repositório
+
+```
+proPosing/
+├── interface_avalonia/
+│   ├── ProPosing.Avalonia/                      # Projeto C# Avalonia
+│   │   ├── Views/                               # MainWindow, LoginWindow, controles (skeleton overlay)
+│   │   ├── ViewModels/                          # MainWindowViewModel, LoginViewModel
+│   │   ├── Models/                              # LandmarkPoint, PoseFeedback, PoseMetrics, PipelineUpdate, PoseOption
+│   │   ├── Services/                            # CameraPipelineService, MediaPipeSidecar, AppConfig
+│   │   ├── Evaluation/                          # ★ Lógica de avaliação de poses
+│   │   │   ├── GeometryHelper.cs                #   Ângulos/distâncias aspect-corrected, body-yaw, tilt, twist
+│   │   │   ├── PoseContext.cs                   #   Contexto por frame (escala, orientação, métricas derivadas)
+│   │   │   ├── PoseThresholds.cs                #   Thresholds (em ratios torso-normalizados)
+│   │   │   ├── PoseEvaluatorRegistry.cs         #   Roteia para o avaliador por pose
+│   │   │   ├── PoseFeedbackSmoother.cs          #   Histerese de status + EMA + tightness
+│   │   │   ├── SymmetryMetric.cs                #   Score de simetria ponderado por confiança
+│   │   │   └── Poses/                           #   Um IPoseEvaluator por pose (10 poses)
+│   │   ├── Converters/                          # StatusToBrush, StatusToLabel
+│   │   ├── Assets/                              # Styles (design tokens), fontes, imagens de referência
+│   │   ├── Evaluation/Poses/                    # 10 avaliadores
+│   │   ├── pose_thresholds.json                 # Configuração de thresholds carregada em runtime
+│   │   └── ProPosing.Avalonia.csproj
+│   ├── sidecar/
+│   │   ├── mediapipe_sidecar.py                 # Sidecar Python (stdin/stdout)
+│   │   └── requirements.txt
+│   └── ProPosing.Avalonia.sln
 │
-├── interface_avalonia/      # App Avalonia (desktop)
-│   ├── ProPosing.Avalonia/
-│   │   ├── Views/           # Janela principal, overlay e componentes
-│   │   ├── ViewModels/      # Estado e comandos da UI
-│   │   ├── Services/        # Câmera, API e pipeline
-│   │   ├── Models/          # DTOs de request/response
-│   │   └── App.axaml
-│   └── README.md
+├── scripts/
+│   ├── build_avalonia_executable.sh             # Build completo: sidecar + Avalonia → .app
+│   ├── rodar_macos_avalonia.sh                  # Atalho para abrir o .app (ou rodar via dotnet)
+│   └── run_training_pipeline.sh                 # Pipeline de treinamento ML (futuro)
 │
-├── interface/               # App Flutter (legado para web/mobile)
-│   ├── lib/
-│   │   ├── main.dart        # Entrada: escolhe CameraScreen ou CameraScreenMacOS
-│   │   ├── core/            # AppTheme, AppColors, PoseConstants
-│   │   ├── data/            # ApiClient, modelos (EvaluationResponse, etc.)
-│   │   └── presentation/    # Screens (câmera), widgets (feedback, skeleton, pose selector)
-│   ├── packages/camera_macos/  # Plugin patcheado para câmera no macOS
-│   ├── macos/               # Config macOS (Info.plist, entitlements)
-│   └── web/                 # index.html (Permissions-Policy para câmera)
+├── ml/                                          # Material de referência por pose
+│   ├── pose_info/                               # Texto e imagens de referência
+│   ├── data/                                    # Dados coletados para treinamento
+│   └── models/                                  # Modelos .pkl (futuro)
 │
-├── proposing/               # Lógica de avaliação (usada pelo backend)
-│   ├── pose_evaluator.py    # Regras geométricas por pose
-│   ├── ml_evaluator.py      # Integração com modelos ML
-│   ├── pose_metrics_loader.py  # Métricas da ml/pose_info
-│   └── data_collector.py    # Coleta de dados para treino
-│
-├── treinamento/             # Scripts de ML
-│   ├── train_model.py       # Treina modelos
-│   ├── process_pose_info.py # Extrai métricas de .pages
-│   ├── consolidate_training_data.py
-│   └── README.md
-│
-├── ml/
-│   ├── pose_info/           # Dados de referência (textos .pages e imagens)
-│   ├── models/              # Modelos ML treinados (.pkl, gerados pelo train_model)
-│   └── data/                # Dados coletados para treinamento
-│
-├── config/                  # Configurações de build
-│   └── proposing_build.spec   # PyInstaller - empacotamento do backend
-│
-├── scripts/                 # Scripts de automação
-│   ├── rodar_macos.sh       # Inicia backend + app Avalonia (desktop padrão)
-│   ├── rodar_macos_avalonia.sh # Inicia backend + app Avalonia (desktop)
-│   ├── rodar_web.sh         # Inicia backend + app web (Chrome)
-│   ├── parar_projeto.sh     # Para backend e Avalonia
-│   ├── parar_projeto_avalonia.sh # Para backend e Avalonia
-│   ├── iniciar_backend.sh   # Apenas backend
-│   ├── build_executable.sh  # Gera ProPosing.app (Avalonia)
-│   ├── build_avalonia_executable.sh # Build desktop Avalonia
-│   └── limpar_flutter_macos.sh  # Limpa build (resolve CodeSign)
-│
-└── README.md
+├── treinamento/                                 # Scripts Python para coleta/processamento ML
+├── docs/
+├── build_app/                                   # Saída do build: ProPosing.app
+└── README.md                                    # Este arquivo
 ```
 
 ---
 
-## 🚀 Como Rodar
+## Pipeline de avaliação de poses
 
-**Execute os scripts a partir da raiz do projeto** (`ProPosing/`).
+Para cada frame, o serviço de pipeline:
 
-### macOS (app nativo)
+1. Captura via OpenCV (1280×720), reduz pela metade para inferência.
+2. Envia o JPEG ao sidecar; recebe 33 landmarks normalizados (`x, y` em `[0,1]`, `z` em metros vs. mid-hip, `visibility` em `[0,1]`).
+3. Constrói um `PoseContext` com:
+   - **Aspect ratio** real do frame — sem isso, ângulos calculados em coordenadas normalizadas ficam distorcidos em frames não quadrados.
+   - **Escala**: `ShoulderSpan`, `TorsoLength`, `HipSpan` — todas aspect-corrected.
+   - **Orientação**: `BodyYawDeg` calculado pela projeção do vetor entre ombros no plano x-z (não depende de visibilidade do nariz).
+   - **`BodyView`**: `Front` / `ThreeQuarter` / `Side` / `Back` (classificação automática a partir do yaw).
+   - **`LateralTiltDeg`**: ângulo do tronco em relação à vertical.
+   - **`TorsoTwistDeg`**: ângulo entre linha dos ombros e linha dos quadris (relevante para tea cup / poses oblíquas).
+4. Roteia para o `IPoseEvaluator` correspondente, que retorna `PoseFeedback` (status + dicas).
+5. O `PoseFeedbackSmoother` aplica:
+   - Histerese de status (3 frames consecutivos para trocar de cor),
+   - EMA nas métricas numéricas,
+   - Cálculo de **tightness** a partir do desvio-padrão recente do twist e tilt.
+6. Métricas adicionais (`PoseMetrics`) são calculadas pelo registry: V-taper, simetria ponderada, yaw, tilt, twist.
+
+### Decisões de projeto importantes
+
+- **Tudo aspect-corrected**: `Angle2D`/`Angle3D` recebem `aspect = width/height`. Sem isso, um cotovelo em flexão de 90° real lê ~85° em câmeras 16:9.
+- **Thresholds em ratios torso-normalizados**: tolerâncias de altura/distância são expressas como fração do torso, não como valores absolutos em coordenadas normalizadas. Resultado: o usuário pode se aproximar ou afastar da câmera sem invalidar os thresholds.
+- **Seleção de braço/perna por profundidade (Z)**: em poses laterais (Side Chest, Side Triceps, Quarter Turn), a discriminação "braço da frente vs. de trás" usa Z, não X. Em perfil verdadeiro, X dos dois ombros é praticamente igual e flutua com ruído — Z é estável.
+- **Sem dependência da visibilidade facial para detectar orientação**: o yaw geométrico substitui a heurística antiga "se o nariz está visível, o usuário está de frente".
+
+---
+
+## Poses suportadas
+
+Teclas `0`–`9` alternam a pose ativa.
+
+| # | Modo | Descrição |
+|---|---|---|
+| 0 | `enquadramento` | Verifica se o usuário está centralizado e a uma distância adequada |
+| 1 | `double_biceps` | Duplo bíceps frontal |
+| 2 | `side_chest` | Side chest |
+| 3 | `side_triceps` | Side triceps |
+| 4 | `most_muscular` | Most muscular |
+| 5 | `quarter_turn_side` | Quarter turn (perfil 90°) |
+| 6 | `front_lat_spread` | Front lat spread |
+| 7 | `back_lat_spread` | Back lat spread |
+| 8 | `abs_and_thighs` | Abs and thighs |
+| 9 | `teacup` | Tea cup (3/4 oblíquo) |
+
+---
+
+## Pré-requisitos
+
+| Ferramenta | Uso | Necessário para |
+|---|---|---|
+| .NET SDK 8+ | UI Avalonia | Desenvolver e rodar |
+| Python 3.10+ | Sidecar MediaPipe | Build do app empacotado |
+| `pip3` | Dependências Python | Build do app empacotado |
+| PyInstaller | Empacota sidecar | Build do app empacotado (instalado automaticamente pelo script) |
+
+> O usuário final do `.app` empacotado **não** precisa de Python nem de .NET — tudo está auto-contido no bundle.
+
+---
+
+## Como rodar
+
+### Modo desenvolvimento (mais rápido para iterar)
 
 ```bash
-./scripts/rodar_macos.sh
+dotnet run --project interface_avalonia/ProPosing.Avalonia/ProPosing.Avalonia.csproj
 ```
 
-- Inicia o backend na porta 8000
-- Roda o app Avalonia em modo desktop
-- Para parar: `Ctrl+C` ou, em outro terminal, `./scripts/parar_projeto.sh`
+Roda direto a UI Avalonia. **Sem o sidecar**: a janela abre normalmente, mas a detecção de pose não funcionará. Use este modo para iterar em UI/avaliação geométrica com landmarks fakes ou sem feedback ao vivo.
 
-### Web (Chrome)
+### App empacotado (produção)
+
+Build:
 
 ```bash
-./scripts/rodar_web.sh
+./scripts/build_avalonia_executable.sh
 ```
 
-- Inicia o backend se não estiver rodando
-- Abre o app no Chrome
-- A câmera requer localhost ou HTTPS
+O script faz:
+1. Empacota o sidecar Python via PyInstaller (`dist/proposing-sidecar/`)
+2. Publica a UI Avalonia em modo Release self-contained
+3. Monta o bundle final em `build_app/ProPosing.app` (no macOS) ou `build_app/proposing-<runtime>/` em outras plataformas
 
-### Parar tudo
+Abrir:
 
 ```bash
-./scripts/parar_projeto.sh
+open build_app/ProPosing.app                # macOS
+./scripts/rodar_macos_avalonia.sh           # atalho que prefere o .app, cai para dotnet run
 ```
 
-### Apenas backend (para testes de API)
+#### Flags úteis
+
+| Variável | Efeito |
+|---|---|
+| `SKIP_SIDECAR_BUILD=1` | Reutiliza `dist/proposing-sidecar/` existente (rebuild rápido só da UI) |
+| `SKIP_PIP_INSTALL=1` | Pula `pip install` se as deps já estão instaladas |
+| `FORCE_SIDECAR_REBUILD=1` | Força rebuild do sidecar mesmo com `dist/` presente |
+| `PYINSTALLER_CLEAN=1` | Passa `--clean` para o PyInstaller |
+| `TARGET_RUNTIME=...` | `osx-arm64` (default), `osx-x64`, `win-x64` |
+
+Iteração típica em desenvolvimento de UI/avaliação após o primeiro build:
 
 ```bash
-./scripts/iniciar_backend.sh
+SKIP_SIDECAR_BUILD=1 SKIP_PIP_INSTALL=1 ./scripts/build_avalonia_executable.sh
 ```
-
-API: `http://localhost:8000` | Docs: `http://localhost:8000/docs`
 
 ---
 
-## 🔄 Funcionamento Técnico
+## Configuração
 
-### Plataformas
+### Thresholds de avaliação
 
-| Plataforma | Câmera | Tela |
-|------------|--------|------|
-| **macOS, Windows, Linux** | OpenCvSharp (captura por frame) | Avalonia MainWindow |
-| **Web, iOS, Android (legado)** | `camera` (plugin oficial) | `CameraScreen` |
+Editáveis em `interface_avalonia/ProPosing.Avalonia/pose_thresholds.json`. O arquivo é copiado para o lado do executável no build. Se o arquivo estiver ausente, o app usa os defaults compilados em `PoseThresholds.cs`.
 
-### API principal
+Convenções de naming:
 
-- **POST /api/v1/pose/evaluate** — Recebe imagem Base64, retorna landmarks, status e feedback
-- **POST /api/v1/pose/select** — Seleciona modo de pose (sem efeito no fluxo atual)
+- `*_min_angle` / `*_max_angle` — graus
+- `*_ratio` — fração do torso ou do shoulder span (ex.: `elbow_drop_ratio_max: 0.06` = 6% do torso)
+- `*_max_deg` — ângulos derivados (ex.: `torso_tilt_max_deg`)
 
-### Dependências principais
+Recarregue o app após editar.
 
-- **Backend:** FastAPI, OpenCV, MediaPipe, NumPy, scikit-learn
-- **Interface desktop:** Avalonia UI, OpenCvSharp, CommunityToolkit.Mvvm
+### Configurações de runtime
 
----
-
-## 📦 Build para Distribuição
-
-```bash
-./scripts/build_executable.sh
-```
-
-Gera `build_app/ProPosing.app` — um único app que inicia backend e interface.
-
-**Requisitos:** Python3, .NET SDK 8+, PyInstaller (`pip3 install pyinstaller`)
-
-**Se der erro de CodeSign:** execute `./scripts/limpar_flutter_macos.sh` (ou rode a partir da raiz) e rode o build novamente.
+`AppConfig` (em `Services/AppConfig.cs`) expõe:
+- `CameraIndex` — qual câmera usar
+- `TargetFps` — alvo do loop de captura
+- `InferenceStride` — rodar inferência a cada N frames
 
 ---
 
-## 📚 Treinamento e Dados de ML
+## Métricas expostas
 
-- **ml/pose_info/** — Contém descrições (.pages) e imagens de referência por pose
-- **ml/models/** — Armazena modelos `.pkl` gerados pelo treinamento
-- **ml/data/** — Armazena dados coletados/processados para treinamento
+Cada `PoseFeedback` carrega um objeto `PoseMetrics` com:
 
-```bash
-cd treinamento
-python3 process_pose_info.py    # Extrai métricas da ml/pose_info
-python3 consolidate_training_data.py
-python3 train_model.py          # Treina e salva em ml/models/
-```
+| Métrica | Significado |
+|---|---|
+| `BodyYawDeg` | Yaw do corpo: 0 = de frente, ±90 = perfil, ±180 = de costas |
+| `LateralTiltDeg` | Inclinação lateral do tronco em graus (vertical = 0) |
+| `TorsoTwistDeg` | Diferença entre yaw dos ombros e dos quadris |
+| `VTaper` | `shoulderSpan / hipSpan` (proxy de cintura) |
+| `Symmetry` | Score [0,1] de simetria, ponderado pela confiança dos landmarks |
+| `Tightness` | Score [0,1] de estabilidade temporal (variância recente do twist/tilt) |
 
-Consulte `treinamento/README.md` para mais detalhes.
-
----
-
-## 🎮 Poses Suportadas
-
-1. Enquadramento  
-2. Duplo Bíceps  
-3. Side Chest  
-4. Side Triceps  
-5. Most Muscular  
-
-Atalhos 1–5 no teclado alternam entre as poses.
+> A versão atual da UI **ainda não exibe** as métricas em uma faixa visível — elas chegam até o ViewModel mas não estão renderizadas. Próximo passo: faixa compacta sob o card de feedback no painel direito.
 
 ---
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 | Problema | Solução |
-|----------|---------|
-| Backend não conecta | `curl http://localhost:8000/health` — se falhar, rode `./scripts/iniciar_backend.sh` |
-| Câmera não funciona na web | Use localhost ou HTTPS. Execute `./scripts/rodar_web.sh` e permita a câmera no navegador |
-| Avalonia não encontra backend | Desktop: localhost por padrão. Verifique `API_HOST` e `API_PORT` no ambiente |
-| Erro de build desktop | Verifique `.NET SDK 8+` e rode `./scripts/build_executable.sh` |
-| Câmera não inicia no macOS | Preferências do Sistema → Privacidade → Câmera — permitir para o app |
+|---|---|
+| Câmera não inicia no macOS | Ajustes do Sistema → Privacidade e Segurança → Câmera → permitir para ProPosing (ou para o Terminal, se rodando via `dotnet run`). Após a primeira concessão, feche e reabra o app — o macOS não ativa o `VideoCapture` existente. |
+| Sidecar não carrega no app empacotado | Verifique `Contents/MacOS/proposing-sidecar/proposing-sidecar` no `.app` (deve ser executável). Rebuild com `FORCE_SIDECAR_REBUILD=1`. |
+| `pose_landmark_lite.tflite` faltando | O script garante esse modelo após o build. Se mesmo assim faltar, rode com `FORCE_SIDECAR_REBUILD=1 PYINSTALLER_CLEAN=1`. |
+| Build .NET falha | Confirme `dotnet --version` ≥ 8.0. Limpe `obj/` e `bin/` em `interface_avalonia/ProPosing.Avalonia` e rode novamente. |
+| Pose nunca passa a "correct" | Edite `pose_thresholds.json` ou observe os hints retornados — eles indicam exatamente o que ajustar. |
+| Hints piscam entre frames | Já há histerese (3 frames consecutivos). Se ainda piscar, verifique `InferenceStride` (rodar inferência menos frequentemente reduz ruído). |
 
 ---
 
-## 📖 Documentação Adicional
+## Documentação adicional
 
-- `treinamento/README.md` — Treinamento básico
-- `treinamento/README_TREINAMENTO_AVANCADO.md` — Web scraping e fluxos avançados
-- `scripts/README.md` — Guia rápido dos scripts de automação
-- `docs/REPO_ORGANIZATION.md` — Convenções de organização do repositório
+- [`scripts/README.md`](scripts/README.md) — referência rápida dos scripts
+- [`interface_avalonia/README.md`](interface_avalonia/README.md) — notas específicas da UI
+- [`treinamento/README.md`](treinamento/README.md) — pipeline de treinamento (em evolução)
 
 ---
 
-**ProPosing** — Sistema de Análise de Poses de Fisiculturismo
+**ProPosing** — Análise de poses de fisiculturismo, em tempo real, no desktop.

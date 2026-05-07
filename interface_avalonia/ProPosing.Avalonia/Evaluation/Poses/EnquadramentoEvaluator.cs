@@ -12,35 +12,37 @@ public sealed class EnquadramentoEvaluator : IPoseEvaluator
 
     public string PoseMode => "enquadramento";
 
-    public PoseFeedback Evaluate(IReadOnlyList<LandmarkPoint> lms)
+    public PoseFeedback Evaluate(PoseContext ctx)
     {
+        var lms = ctx.Landmarks;
         var ls = lms[Idx.LeftShoulder];
         var rs = lms[Idx.RightShoulder];
 
-        if (!IsVisible(ls) || !IsVisible(rs))
+        if (!IsReliable(ls) || !IsReliable(rs))
             return new PoseFeedback("incorrect", "Ombros não visíveis — recue um pouco", []);
 
         var errors = new List<string>();
 
-        // Horizontal centering: midpoint of shoulders should be near 0.5
-        // Python equivalent: offset < width * 0.1  →  abs(midX - 0.5) < 0.1
+        // Horizontal centering: midpoint of shoulders near 0.5.
         double midX = (ls.X + rs.X) / 2.0;
         if (midX < _t.CenterMinX)
             errors.Add("Mova para a direita para centralizar");
         else if (midX > _t.CenterMaxX)
             errors.Add("Mova para a esquerda para centralizar");
 
-        // Distância da câmera via span dos ombros
-        double span = Math.Abs(ls.X - rs.X);
-        if (span < _t.ShoulderSpanMin)
+        // Distance via raw x-only shoulder span (this rule is inherently in frame-space).
+        double spanX = Math.Abs(ls.X - rs.X);
+        if (spanX < _t.ShoulderSpanMin)
             errors.Add("Muito longe — aproxime-se da câmera");
-        else if (span > _t.ShoulderSpanMax)
+        else if (spanX > _t.ShoulderSpanMax)
             errors.Add("Muito perto — afaste-se da câmera");
 
-        // Posição vertical: ombros devem estar na parte superior do quadro
-        double shoulderMidY = (ls.Y + rs.Y) / 2.0;
-        if (shoulderMidY > _t.ShoulderMidYMax)
-            errors.Add("Muito baixo no quadro — recue ou ajuste a câmera");
+        // Vertical position check — both directions, not just "too low".
+        double midY = (ls.Y + rs.Y) / 2.0;
+        if (midY < _t.ShoulderMidYMin)
+            errors.Add("Muito alto no quadro — ajuste a câmera para baixo");
+        else if (midY > _t.ShoulderMidYMax)
+            errors.Add("Muito baixo no quadro — ajuste a câmera para cima");
 
         return PoseFeedback.FromErrors(errors, "Enquadramento perfeito!");
     }

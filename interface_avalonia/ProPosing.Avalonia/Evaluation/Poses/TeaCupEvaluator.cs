@@ -16,8 +16,9 @@ public sealed class TeaCupEvaluator : IPoseEvaluator
 
     public string PoseMode => "teacup";
 
-    public PoseFeedback Evaluate(IReadOnlyList<LandmarkPoint> lms)
+    public PoseFeedback Evaluate(PoseContext ctx)
     {
+        var lms = ctx.Landmarks;
         var ls = lms[Idx.LeftShoulder];  var rs = lms[Idx.RightShoulder];
         var le = lms[Idx.LeftElbow];     var re = lms[Idx.RightElbow];
         var lw = lms[Idx.LeftWrist];     var rw = lms[Idx.RightWrist];
@@ -25,69 +26,71 @@ public sealed class TeaCupEvaluator : IPoseEvaluator
         var lk = lms[Idx.LeftKnee];      var rk = lms[Idx.RightKnee];
         var la = lms[Idx.LeftAnkle];     var ra = lms[Idx.RightAnkle];
 
+        double torso = Math.Max(ctx.TorsoLength, 1e-6);
         var errors = new List<string>();
 
-        // ── 1. Rotação do torso: um ombro notavelmente mais alto ──────
-        if (IsVisible(ls) && IsVisible(rs))
-        {
-            double shoulderYDiff = Math.Abs(ls.Y - rs.Y);
-            if (shoulderYDiff < _t.ShoulderYDiffMin)
-                errors.Add("Gire o torso em 3/4 — um ombro deve estar mais alto que o outro");
-        }
+        // 1. Torso twist — the real quantity. Replaces "one shoulder higher" hack.
+        if (ctx.TorsoTwistDeg < _t.TorsoTwistMinDeg)
+            errors.Add("Gire o torso em 3/4 — ombros e quadris devem estar desalinhados");
 
-        // ── 2. Detectar braço levantado (punho acima do ombro) ────────
-        bool leftRaised  = IsVisible(lw) && IsVisible(ls) && lw.Y < ls.Y;
-        bool rightRaised = IsVisible(rw) && IsVisible(rs) && rw.Y < rs.Y;
+        // 2. Identify the raised arm. Require wrist well above shoulder, not just higher.
+        double leftRaise  = IsReliable(lw) && IsReliable(ls)
+            ? -VerticalGap(lw, ls, ctx.Aspect) / torso : double.NegativeInfinity;
+        double rightRaise = IsReliable(rw) && IsReliable(rs)
+            ? -VerticalGap(rw, rs, ctx.Aspect) / torso : double.NegativeInfinity;
+
+        bool leftRaised  = leftRaise  > _t.RaisedWristAboveShoulderRatioMin;
+        bool rightRaised = rightRaise > _t.RaisedWristAboveShoulderRatioMin;
 
         if (!leftRaised && !rightRaised)
         {
-            errors.Add("Levante um braço com o cotovelo flexionado — punho acima do ombro");
+            // Provide a more actionable hint when *neither* arm is far enough up.
+            double best = Math.Max(leftRaise, rightRaise);
+            if (double.IsFinite(best))
+                errors.Add("Levante mais o braço — punho deve estar claramente acima do ombro");
+            else
+                errors.Add("Levante um braço com o cotovelo flexionado — punho acima do ombro");
         }
         else
         {
-            var raisedShoulder = leftRaised ? ls : rs;
-            var raisedElbow    = leftRaised ? le : re;
-            var raisedWrist    = leftRaised ? lw : rw;
-            var lowHip         = leftRaised ? rh : lh;
-            var lowWrist       = leftRaised ? rw : lw;
+            // Prefer the clearly-higher arm; only defer to leftRaised if tied.
+            bool useLeft = leftRaise >= rightRaise;
+            var (rs1, re1, rw1) = useLeft ? (ls, le, lw) : (rs, re, rw);
+            var (lowHip, lowWrist) = useLeft ? (rh, rw) : (lh, lw);
 
-            // ── 3. Punho levantado bem acima do ombro ─────────────────
-            if (IsVisible(raisedShoulder) && IsVisible(raisedWrist))
+            // 3. Raised arm flex angle.
+            if (AllReliable(rs1, re1, rw1))
             {
-                if (raisedWrist.Y > raisedShoulder.Y - _t.RaisedWristAboveShoulderTolerance)
-                    errors.Add("Levante mais o braço — punho deve estar claramente acima do ombro");
+                double angle = Angle3D(rs1, re1, rw1, ctx.Aspect);
+                if (!double.IsNaN(angle))
+                {
+                    if (angle < _t.RaisedElbowMinAngle)
+                        errors.Add($"Braço levantado muito fechado — {_t.RaisedElbowMinAngle}–{_t.RaisedElbowMaxAngle}° (atual: {angle:F0}°)");
+                    else if (angle > _t.RaisedElbowMaxAngle)
+                        errors.Add($"Braço levantado muito aberto — {_t.RaisedElbowMinAngle}–{_t.RaisedElbowMaxAngle}° (atual: {angle:F0}°)");
+                }
             }
 
-            // ── 4. Cotovelo do braço levantado flexionado ─────────────
-            if (IsVisible(raisedShoulder) && IsVisible(raisedElbow) && IsVisible(raisedWrist))
+            // 4. Low arm relaxed near the hip.
+            if (AllReliable(lowWrist, lowHip))
             {
-                double angle = Angle(raisedShoulder, raisedElbow, raisedWrist);
-                if (angle < _t.RaisedElbowMinAngle)
-                    errors.Add($"Braço levantado muito fechado — flexione para {_t.RaisedElbowMinAngle}–{_t.RaisedElbowMaxAngle}° (atual: {angle:F0}°)");
-                else if (angle > _t.RaisedElbowMaxAngle)
-                    errors.Add($"Braço levantado muito aberto — contraia para {_t.RaisedElbowMinAngle}–{_t.RaisedElbowMaxAngle}° (atual: {angle:F0}°)");
-            }
-
-            // ── 5. Braço baixo: punho perto do quadril ────────────────
-            if (IsVisible(lowWrist) && IsVisible(lowHip))
-            {
-                double diff = Math.Abs(lowWrist.Y - lowHip.Y);
-                if (diff > _t.LowWristHipYMax)
+                double deviation = Math.Abs(lowWrist.Y - lowHip.Y) * ctx.Aspect / torso;
+                if (deviation > _t.LowWristHipRatioMax)
                     errors.Add("Braço baixo deve estar relaxado ao nível do quadril");
             }
         }
 
-        // ── 6. Joelhos razoavelmente estendidos ───────────────────────
-        if (IsVisible(lh) && IsVisible(lk) && IsVisible(la))
+        // 5. Knees reasonably extended.
+        if (AllReliable(lh, lk, la))
         {
-            double angle = Angle(lh, lk, la);
-            if (angle < _t.KneeMinAngle)
+            double angle = Angle3D(lh, lk, la, ctx.Aspect);
+            if (!double.IsNaN(angle) && angle < _t.KneeMinAngle)
                 errors.Add($"Estenda mais a perna esquerda ({angle:F0}°)");
         }
-        if (IsVisible(rh) && IsVisible(rk) && IsVisible(ra))
+        if (AllReliable(rh, rk, ra))
         {
-            double angle = Angle(rh, rk, ra);
-            if (angle < _t.KneeMinAngle)
+            double angle = Angle3D(rh, rk, ra, ctx.Aspect);
+            if (!double.IsNaN(angle) && angle < _t.KneeMinAngle)
                 errors.Add($"Estenda mais a perna direita ({angle:F0}°)");
         }
 

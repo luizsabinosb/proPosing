@@ -101,7 +101,9 @@ public sealed class CameraPipelineService
             {
                 var small = new Mat();
                 Cv2.Resize(frame, small, new OpenCvSharp.Size(frame.Cols / 2, frame.Rows / 2));
-                _ = RunInferenceAsync(small, ct);
+                // Aspect ratio is invariant under uniform resize — use the source frame's.
+                double aspect = frame.Rows > 0 ? (double)frame.Cols / frame.Rows : 1.0;
+                _ = RunInferenceAsync(small, aspect, ct);
             }
 
             using var bgra = new Mat();
@@ -210,14 +212,17 @@ public sealed class CameraPipelineService
 
     // ── Inference ──────────────────────────────────────────────────────────────
 
-    private async Task RunInferenceAsync(Mat frame, CancellationToken ct)
+    private readonly PoseFeedbackSmoother _smoother = new();
+
+    private async Task RunInferenceAsync(Mat frame, double aspect, CancellationToken ct)
     {
         _inferenceInFlight = true;
         try
         {
             var landmarks = await _sidecar.GetLandmarksAsync(frame, ct);
             _lastLandmarks = landmarks;
-            _lastFeedback  = _evaluatorRegistry.Evaluate(_poseMode, landmarks);
+            var raw = _evaluatorRegistry.Evaluate(_poseMode, landmarks, aspect);
+            _lastFeedback  = _smoother.Apply(_poseMode, raw);
         }
         catch (OperationCanceledException) { /* shutdown */ }
         finally

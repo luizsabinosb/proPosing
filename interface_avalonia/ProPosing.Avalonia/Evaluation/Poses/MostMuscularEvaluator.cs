@@ -4,8 +4,8 @@ using static ProPosing.Avalonia.Evaluation.GeometryHelper;
 namespace ProPosing.Avalonia.Evaluation.Poses;
 
 /// <summary>
-/// Most Muscular: front-facing, both hands brought close together at lower chest/abdomen,
-/// elbows pointing outward and downward, body slightly leaned forward.
+/// Most Muscular: front-facing, both hands brought close at lower chest/abdomen,
+/// elbows flared outward and downward, body slightly leaned forward.
 /// </summary>
 public sealed class MostMuscularEvaluator : IPoseEvaluator
 {
@@ -16,72 +16,75 @@ public sealed class MostMuscularEvaluator : IPoseEvaluator
 
     public string PoseMode => "most_muscular";
 
-    public PoseFeedback Evaluate(IReadOnlyList<LandmarkPoint> lms)
+    public PoseFeedback Evaluate(PoseContext ctx)
     {
+        if (ctx.View == BodyView.Back)
+            return new PoseFeedback("incorrect", "Vire de frente para a câmera", []);
+
+        var lms = ctx.Landmarks;
         var ls = lms[Idx.LeftShoulder];  var rs = lms[Idx.RightShoulder];
         var le = lms[Idx.LeftElbow];     var re = lms[Idx.RightElbow];
         var lw = lms[Idx.LeftWrist];     var rw = lms[Idx.RightWrist];
-        var lk = lms[Idx.LeftKnee];      var rk = lms[Idx.RightKnee];
         var lh = lms[Idx.LeftHip];       var rh = lms[Idx.RightHip];
+        var lk = lms[Idx.LeftKnee];      var rk = lms[Idx.RightKnee];
         var la = lms[Idx.LeftAnkle];     var ra = lms[Idx.RightAnkle];
 
-        // ── 0. Corpo completo deve estar no enquadramento ─────────────
-        if (!IsVisible(lh) || !IsVisible(rh))
+        if (!AllReliable(lh, rh))
             return new PoseFeedback("incorrect",
                 "Recue da câmera para mostrar o corpo inteiro na tela", []);
 
+        double torso = Math.Max(ctx.TorsoLength, 1e-6);
         var errors = new List<string>();
 
-        // ── 1. Cotovelos abaixo dos ombros (braços puxados para baixo) ─
-        if (IsVisible(ls) && IsVisible(le) && le.Y <= ls.Y + _t.ElbowBelowShoulderTolerance)
-            errors.Add("Cotovelo esquerdo deve estar abaixo do ombro — puxe para baixo");
-        if (IsVisible(rs) && IsVisible(re) && re.Y <= rs.Y + _t.ElbowBelowShoulderTolerance)
-            errors.Add("Cotovelo direito deve estar abaixo do ombro — puxe para baixo");
-
-        // ── 2. Punhos próximos — mãos quase se tocando ────────────────
-        // Usa distância 2D para tolerar mãos entrelaçadas onde X e Y divergem levemente
-        if (IsVisible(lw) && IsVisible(rw) && IsVisible(ls) && IsVisible(rs))
+        // 1. Elbows below shoulders (torso-normalized).
+        if (AllReliable(ls, le))
         {
-            double dx           = lw.X - rw.X;
-            double dy           = lw.Y - rw.Y;
-            double wristDist    = Math.Sqrt(dx * dx + dy * dy);
-            double shoulderSpan = Math.Abs(ls.X - rs.X);
-            if (shoulderSpan > 0 && wristDist > shoulderSpan * _t.WristProximityRatio)
+            double below = VerticalGap(ls, le, ctx.Aspect) / torso;
+            if (below < _t.ElbowBelowShoulderRatioMin)
+                errors.Add("Cotovelo esquerdo deve estar abaixo do ombro — puxe para baixo");
+        }
+        if (AllReliable(rs, re))
+        {
+            double below = VerticalGap(rs, re, ctx.Aspect) / torso;
+            if (below < _t.ElbowBelowShoulderRatioMin)
+                errors.Add("Cotovelo direito deve estar abaixo do ombro — puxe para baixo");
+        }
+
+        // 2. Wrists close together — distance normalized by shoulder span, aspect-correct.
+        if (AllReliable(lw, rw) && ctx.ShoulderSpan > 1e-6)
+        {
+            double wristDist = Distance2D(lw, rw, ctx.Aspect);
+            if (wristDist / ctx.ShoulderSpan > _t.WristProximityRatio)
                 errors.Add("Aproxime mais as mãos — punhos devem estar juntos no centro do corpo");
         }
 
-        // ── 3. Punhos na altura do tronco (não acima dos ombros) ──────
-        if (IsVisible(ls) && IsVisible(rs) && IsVisible(lw) && IsVisible(rw))
+        // 3. Wrists not above shoulders (torso-normalized).
+        if (AllReliable(ls, rs, lw, rw))
         {
             double shoulderMidY = (ls.Y + rs.Y) / 2.0;
             double wristMidY    = (lw.Y + rw.Y) / 2.0;
-            if (wristMidY < shoulderMidY - 0.05)
-                errors.Add("Abaixe as mãos — punhos devem estar na altura do abdômen, não acima dos ombros");
+            double above = (shoulderMidY - wristMidY) * ctx.Aspect / torso;
+            if (above > _t.WristAboveShoulderRatioMax)
+                errors.Add("Abaixe as mãos — punhos devem estar na altura do abdômen");
         }
 
-        // ── 4. Simetria do torso ───────────────────────────────────────
-        if (IsVisible(ls) && IsVisible(lh) && IsVisible(rs) && IsVisible(rh))
-        {
-            double leftTorso  = Math.Abs(ls.Y - lh.Y);
-            double rightTorso = Math.Abs(rs.Y - rh.Y);
-            if (Math.Abs(leftTorso - rightTorso) > _t.TorsoAsymmetryMax)
-                errors.Add("Mantenha o torso alinhado — não incline para um lado");
-        }
+        // 4. Lateral torso tilt — the correct geometric quantity, in degrees.
+        if (ctx.LateralTiltDeg > _t.TorsoTiltMaxDeg)
+            errors.Add("Mantenha o torso alinhado — não incline para um lado");
 
-        // ── 5. Joelhos estendidos ──────────────────────────────────────
-        if (IsVisible(lh) && IsVisible(lk) && IsVisible(la))
-        {
-            double angle = Angle(lh, lk, la);
-            if (angle < _t.KneeMinAngle)
-                errors.Add($"Estenda mais a perna esquerda (atual: {angle:F0}°)");
-        }
-        if (IsVisible(rh) && IsVisible(rk) && IsVisible(ra))
-        {
-            double angle = Angle(rh, rk, ra);
-            if (angle < _t.KneeMinAngle)
-                errors.Add($"Estenda mais a perna direita (atual: {angle:F0}°)");
-        }
+        // 5. Knees reasonably extended.
+        CheckKnee(errors, "esquerda", ctx, lh, lk, la);
+        CheckKnee(errors, "direita",  ctx, rh, rk, ra);
 
         return PoseFeedback.FromErrors(errors, "Excelente most muscular! Musculatura máxima em destaque.");
+    }
+
+    private void CheckKnee(List<string> errors, string side, PoseContext ctx,
+        LandmarkPoint h, LandmarkPoint k, LandmarkPoint a)
+    {
+        if (!AllReliable(h, k, a)) return;
+        double angle = Angle3D(h, k, a, ctx.Aspect);
+        if (!double.IsNaN(angle) && angle < _t.KneeMinAngle)
+            errors.Add($"Estenda mais a perna {side} (atual: {angle:F0}°)");
     }
 }
