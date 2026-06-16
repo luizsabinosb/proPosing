@@ -23,6 +23,31 @@ public sealed class MediaPipeSidecar : IDisposable
     private Process? _process;
     private BinaryWriter? _stdin;
     private StreamReader? _stdout;
+    private string _pythonPath = "python3";
+    private volatile bool _starting;
+
+    /// <summary>
+    /// True while the sidecar is starting or its process is running and ready.
+    /// The watchdog in CameraPipelineService polls this to trigger restarts.
+    /// </summary>
+    public bool IsAlive
+    {
+        get
+        {
+            if (_starting) return true;
+            try
+            {
+                return _process is { HasExited: false } && _stdin is not null;
+            }
+            catch
+            {
+                return false; // process handle in an unqueryable state — treat as dead
+            }
+        }
+    }
+
+    /// <summary>Restarts the sidecar with the same python path used previously.</summary>
+    public Task RestartAsync() => StartAsync(_pythonPath);
 
     /// <summary>
     /// Resolves how to launch the sidecar:
@@ -35,9 +60,10 @@ public sealed class MediaPipeSidecar : IDisposable
     {
         var baseDir = AppContext.BaseDirectory;
 
-        // 1. Compiled sidecar binary — no Python needed (production .app bundle)
-        // PyInstaller --onedir layout: proposing-sidecar/proposing-sidecar
-        var compiledBin = Path.Combine(baseDir, "proposing-sidecar", "proposing-sidecar");
+        // 1. Compiled sidecar binary — no Python needed (production bundle)
+        // PyInstaller --onedir layout: proposing-sidecar/proposing-sidecar(.exe no Windows)
+        var binName = OperatingSystem.IsWindows() ? "proposing-sidecar.exe" : "proposing-sidecar";
+        var compiledBin = Path.Combine(baseDir, "proposing-sidecar", binName);
         if (File.Exists(compiledBin))
         {
             Console.Error.WriteLine($"[sidecar] Using compiled binary: {compiledBin}");
@@ -65,6 +91,27 @@ public sealed class MediaPipeSidecar : IDisposable
     /// </summary>
     public async Task StartAsync(string pythonPath = "python3")
     {
+        _starting = true;
+        try
+        {
+            await StartCoreAsync(pythonPath);
+        }
+        finally
+        {
+            _starting = false;
+        }
+    }
+
+    private async Task StartCoreAsync(string pythonPath)
+    {
+        _pythonPath = pythonPath;
+
+        // Hide the streams before tearing down so GetLandmarksAsync returns []
+        // instead of touching a dying process.
+        _stdin  = null;
+        _stdout = null;
+        ShutdownProcess();
+
         var (executable, arguments) = ResolveSidecarInvocation(pythonPath);
         Console.Error.WriteLine($"[sidecar] Starting: {executable} {arguments}".TrimEnd());
 
@@ -197,16 +244,19 @@ public sealed class MediaPipeSidecar : IDisposable
         return result;
     }
 
+    private void ShutdownProcess()
+    {
+        if (_process is null) return;
+        try { _process.CancelErrorRead(); } catch { /* ignored */ }
+        try { if (!_process.HasExited) _process.Kill(); } catch { /* ignored */ }
+        try { _process.Dispose(); } catch { /* ignored */ }
+        _process = null;
+    }
+
     public void Dispose()
     {
         try { _stdin?.Close(); } catch { /* ignored */ }
         try { _stdout?.Close(); } catch { /* ignored */ }
-
-        if (_process is not null)
-        {
-            try { _process.CancelErrorRead(); } catch { /* ignored */ }
-            try { if (!_process.HasExited) _process.Kill(); } catch { /* ignored */ }
-            _process.Dispose();
-        }
+        ShutdownProcess();
     }
 }

@@ -33,8 +33,14 @@ public sealed class BackLatSpreadEvaluator : IPoseEvaluator
         double torso = Math.Max(ctx.TorsoLength, 1e-6);
         var errors = new List<string>();
 
-        // 1. Elbows spread wider than shoulders.
-        if (AllReliable(le, re) && ctx.ShoulderSpan > 1e-6)
+        // 1. Elbows spread wider than shoulders — the DEFINING lat-spread shape. Not
+        //    skippable: undetected elbows (arms down / out of frame) mean the pose isn't
+        //    being presented, so we flag it instead of passing trivially.
+        if (!AllReliable(le, re))
+        {
+            errors.Add("Leve as mãos à cintura e abra bem os cotovelos para os lados");
+        }
+        else if (ctx.ShoulderSpan > 1e-6)
         {
             double elbowSpan = Distance2D(le, re, ctx.Aspect);
             if (elbowSpan / ctx.ShoulderSpan < _t.ElbowSpreadMinRatio)

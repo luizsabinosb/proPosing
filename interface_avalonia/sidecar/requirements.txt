@@ -1,0 +1,7 @@
+# Dependências do sidecar MediaPipe (mediapipe_sidecar.py)
+# Funciona em macOS, Windows e Linux — instalar com:
+#   pip install -r requirements.txt
+mediapipe>=0.10,<0.11
+opencv-python>=4.8
+numpy>=1.24,<2.0
+certifi

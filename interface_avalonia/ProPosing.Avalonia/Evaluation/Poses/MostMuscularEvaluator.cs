@@ -29,9 +29,10 @@ public sealed class MostMuscularEvaluator : IPoseEvaluator
         var lk = lms[Idx.LeftKnee];      var rk = lms[Idx.RightKnee];
         var la = lms[Idx.LeftAnkle];     var ra = lms[Idx.RightAnkle];
 
-        if (!AllReliable(lh, rh))
-            return new PoseFeedback("incorrect",
-                "Recue da câmera para mostrar o corpo inteiro na tela", []);
+        // Upper-body framing is allowed: evaluate the arms/torso from what is visible.
+        // Lower-body feedback is gated on visibility so we never invent leg errors.
+        if (!AllReliable(ls, rs))
+            return new PoseFeedback("incorrect", "Ombros não visíveis — ajuste o enquadramento", []);
 
         double torso = Math.Max(ctx.TorsoLength, 1e-6);
         var errors = new List<string>();
@@ -50,17 +51,23 @@ public sealed class MostMuscularEvaluator : IPoseEvaluator
                 errors.Add("Cotovelo direito deve estar abaixo do ombro — puxe para baixo");
         }
 
-        // 2. Wrists close together — distance normalized by shoulder span, aspect-correct.
-        if (AllReliable(lw, rw) && ctx.ShoulderSpan > 1e-6)
+        // 2. Hands brought close together at the abdomen — the DEFINING feature of the
+        //    pose. Not skippable: if the wrists aren't detected (arms down / out of frame)
+        //    the athlete isn't presenting the pose, so we flag it instead of passing.
+        if (!AllReliable(lw, rw))
         {
-            double wristDist = Distance2D(lw, rw, ctx.Aspect);
-            if (wristDist / ctx.ShoulderSpan > _t.WristProximityRatio)
-                errors.Add("Aproxime mais as mãos — punhos devem estar juntos no centro do corpo");
+            errors.Add("Traga as duas mãos à frente, próximas no centro do abdômen");
         }
-
-        // 3. Wrists not above shoulders (torso-normalized).
-        if (AllReliable(ls, rs, lw, rw))
+        else
         {
+            if (ctx.ShoulderSpan > 1e-6)
+            {
+                double wristDist = Distance2D(lw, rw, ctx.Aspect);
+                if (wristDist / ctx.ShoulderSpan > _t.WristProximityRatio)
+                    errors.Add("Aproxime mais as mãos — punhos devem estar juntos no centro do corpo");
+            }
+
+            // Wrists at abdomen level — not raised above the shoulders.
             double shoulderMidY = (ls.Y + rs.Y) / 2.0;
             double wristMidY    = (lw.Y + rw.Y) / 2.0;
             double above = (shoulderMidY - wristMidY) * ctx.Aspect / torso;
@@ -68,13 +75,16 @@ public sealed class MostMuscularEvaluator : IPoseEvaluator
                 errors.Add("Abaixe as mãos — punhos devem estar na altura do abdômen");
         }
 
-        // 4. Lateral torso tilt — the correct geometric quantity, in degrees.
-        if (ctx.LateralTiltDeg > _t.TorsoTiltMaxDeg)
+        // 4. Lateral torso tilt — only when hips are visible (tilt needs the hip line).
+        if (ctx.HipsReliable && ctx.LateralTiltDeg > _t.TorsoTiltMaxDeg)
             errors.Add("Mantenha o torso alinhado — não incline para um lado");
 
-        // 5. Knees reasonably extended.
-        CheckKnee(errors, "esquerda", ctx, lh, lk, la);
-        CheckKnee(errors, "direita",  ctx, rh, rk, ra);
+        // 5. Knees reasonably extended — skipped entirely on waist-up framing.
+        if (ctx.LowerBodyVisible)
+        {
+            CheckKnee(errors, "esquerda", ctx, lh, lk, la);
+            CheckKnee(errors, "direita",  ctx, rh, rk, ra);
+        }
 
         return PoseFeedback.FromErrors(errors, "Excelente most muscular! Musculatura máxima em destaque.");
     }

@@ -51,12 +51,16 @@ public sealed class PoseThresholds
 // ── Double Biceps ───────────────────────────────────────────────────────────
 public sealed class DoubleBicepsThresholds
 {
-    [JsonPropertyName("elbow_min_angle")]          public double ElbowMinAngle         { get; set; } = 30;
-    [JsonPropertyName("elbow_max_angle")]          public double ElbowMaxAngle         { get; set; } = 80;
+    [JsonPropertyName("elbow_min_angle")]          public double ElbowMinAngle         { get; set; } = 50;
+    [JsonPropertyName("elbow_max_angle")]          public double ElbowMaxAngle         { get; set; } = 100;
     /// <summary>Max allowed (elbow.y − shoulder.y)·aspect / torso before reporting "elbow too low".</summary>
     [JsonPropertyName("elbow_drop_ratio_max")]     public double ElbowDropRatioMax     { get; set; } = 0.06;
-    /// <summary>Max elbow-height asymmetry / torso.</summary>
-    [JsonPropertyName("elbow_asymmetry_ratio")]    public double ElbowAsymmetryRatio   { get; set; } = 0.15;
+    /// <summary>
+    /// Max elbow-height asymmetry / torso before flagging "shoulders/arms uneven".
+    /// Kept deliberately loose (0.22) for accessibility — perfect left/right leveling
+    /// is unrealistic, so we always allow a real tolerance band rather than demand 0.
+    /// </summary>
+    [JsonPropertyName("elbow_asymmetry_ratio")]    public double ElbowAsymmetryRatio   { get; set; } = 0.22;
     /// <summary>Min elbowSpan / shoulderSpan for "arms open wide".</summary>
     [JsonPropertyName("elbow_spread_min_ratio")]   public double ElbowSpreadMinRatio   { get; set; } = 0.85;
 }
@@ -64,11 +68,17 @@ public sealed class DoubleBicepsThresholds
 // ── Side Chest ──────────────────────────────────────────────────────────────
 public sealed class SideChestThresholds
 {
-    [JsonPropertyName("arm_min_angle")]                public double ArmMinAngle             { get; set; } = 70;
-    [JsonPropertyName("arm_max_angle")]                public double ArmMaxAngle             { get; set; } = 130;
+    [JsonPropertyName("arm_min_angle")]                public double ArmMinAngle             { get; set; } = 75;
+    [JsonPropertyName("arm_max_angle")]                public double ArmMaxAngle             { get; set; } = 120;
     /// <summary>Max (shoulder.y − elbow.y)·aspect / torso before elbow is "too high".</summary>
     [JsonPropertyName("elbow_rise_ratio_max")]         public double ElbowRiseRatioMax       { get; set; } = 0.20;
-    [JsonPropertyName("opposite_arm_extended_min")]    public double OppositeArmExtendedMin  { get; set; } = 160;
+    /// <summary>
+    /// Back arm must be <b>flexed</b> (it grabs the front wrist): if its angle exceeds
+    /// this it is "too extended" and we ask the athlete to flex. Doc v2 competitive
+    /// ideal is 40–70°; kept at 90° because the back arm is the far/occluded one in
+    /// profile and its angle is noisy — tighten toward 70 for strict competitive judging.
+    /// </summary>
+    [JsonPropertyName("opposite_arm_extended_min")]    public double OppositeArmExtendedMin  { get; set; } = 90;
     [JsonPropertyName("knee_min_angle")]               public double KneeMinAngle            { get; set; } = 160;
     [JsonPropertyName("knee_max_angle")]               public double KneeMaxAngle            { get; set; } = 175;
     /// <summary>Wrist-to-shoulder tolerance (torso-normalized) above which wrist is "too high".</summary>

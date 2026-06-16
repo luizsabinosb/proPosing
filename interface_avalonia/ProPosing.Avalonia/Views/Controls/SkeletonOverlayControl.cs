@@ -133,6 +133,8 @@ public sealed class SkeletonOverlayControl : Control
         var imageAspect = (double)ImageWidth.Value / ImageHeight.Value;
         var containerAspect = size.Width / size.Height;
 
+        // Matches Image Stretch=Uniform: scale so the whole image fits inside the
+        // container (letterboxed on the less-constrained axis, centered).
         if (imageAspect > containerAspect)
         {
             var h = size.Width / imageAspect;

@@ -32,6 +32,11 @@ public sealed class QuarterTurnEvaluator : IPoseEvaluator
         bool leftOk  = AllReliable(ls, le, lw);
         bool rightOk = AllReliable(rs, re, rw);
 
+        // Arms are defining for this pose: with neither detected, every check below
+        // would be skipped and the pose would pass trivially.
+        if (!leftOk && !rightOk)
+            return new PoseFeedback("incorrect", "Braços não detectados — verifique o enquadramento", []);
+
         // Front arm = nearer shoulder (lower z). Stable in true profile where X collapses.
         bool leftIsFront = IsReliable(ls) && IsReliable(rs) ? ls.Z <= rs.Z : leftOk;
         var (fs, fe, fw) = leftIsFront ? (ls, le, lw) : (rs, re, rw);

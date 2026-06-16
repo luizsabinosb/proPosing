@@ -9,6 +9,7 @@ public partial class LoginWindow : Window
     public LoginWindow()
     {
         InitializeComponent();
+        Opened += (_, _) => EmailBox.Focus();
     }
 
     private void OnKeyDown(object? sender, KeyEventArgs e)

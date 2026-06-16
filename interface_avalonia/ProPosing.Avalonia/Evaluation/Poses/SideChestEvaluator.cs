@@ -74,8 +74,11 @@ public sealed class SideChestEvaluator : IPoseEvaluator
                 errors.Add("Braço muito baixo — mantenha o punho na altura do peito ou cintura");
         }
 
-        // 4. Back arm must be flexed (otherwise pec isn't compressed).
-        if (backOk)
+        // 4. Back arm must be flexed (it grips the front wrist; otherwise pec isn't
+        //    compressed). In profile the back arm is partially occluded so MediaPipe's
+        //    extrapolated z is noisy — only judge it when each landmark is highly
+        //    visible (≥0.7), and only fire on clear extension via OppositeArmExtendedMin.
+        if (backOk && IsReliable(bs, 0.7) && IsReliable(be, 0.7) && IsReliable(bw, 0.7))
         {
             double backAngle = Angle3D(bs, be, bw, ctx.Aspect);
             if (!double.IsNaN(backAngle) && backAngle > _t.OppositeArmExtendedMin)

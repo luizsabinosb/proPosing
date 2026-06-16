@@ -103,10 +103,17 @@
         </Grid>
       </Border>
 
-      <!-- CENTER — Camera feed -->
-      <Border Grid.Column="1" Background="Black">
+      <!-- CENTER — Camera feed with traffic-light border + overlay feedback banner -->
+      <Border Grid.Column="1"
+              Background="Black"
+              BorderBrush="{Binding Status, Converter={StaticResource StatusToBrush}, ConverterParameter=accent}"
+              BorderThickness="2"
+              ClipToBounds="True">
         <Grid>
+          <!-- Uniform (letterbox) so the full frame is always visible — the user
+               must see their whole body; UniformToFill would crop limbs out. -->
           <Image Source="{Binding CameraFrame}" Stretch="Uniform" />
+
           <controls:SkeletonOverlayControl Landmarks="{Binding Landmarks}"
                                            Status="{Binding Status}"
                                            ImageWidth="{Binding ImageWidth}"
@@ -169,20 +176,87 @@
                           MinWidth="160"
                           Height="40"
                           Margin="0,4,0,0" />
+                  <TextBlock Text="Reconexão automática a cada 15 segundos"
+                             FontSize="12"
+                             Foreground="{StaticResource TextMuted}"
+                             HorizontalAlignment="Center" />
                 </StackPanel>
               </Border>
+
+            </StackPanel>
+          </Border>
+
+          <!-- Feedback banner overlaid at the bottom of the video -->
+          <Border VerticalAlignment="Bottom"
+                  Margin="16,0,16,16"
+                  CornerRadius="10"
+                  Padding="18,14"
+                  Background="#EE0D0D0D"
+                  BorderBrush="{Binding Status, Converter={StaticResource StatusToBrush}, ConverterParameter=border}"
+                  BorderThickness="1"
+                  IsVisible="{Binding HasFrame}">
+            <StackPanel Spacing="10">
+
+              <!-- Status label row — icon glyph so the state doesn't rely on color alone -->
+              <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Status, Converter={StaticResource StatusToLabel}, ConverterParameter=icon}"
+                           FontSize="16"
+                           FontWeight="Bold"
+                           VerticalAlignment="Center"
+                           Foreground="{Binding Status, Converter={StaticResource StatusToBrush}, ConverterParameter=accent}" />
+                <TextBlock Text="{Binding Status, Converter={StaticResource StatusToLabel}}"
+                           FontSize="13"
+                           FontWeight="Bold"
+                           LetterSpacing="2"
+                           VerticalAlignment="Center"
+                           Foreground="{Binding Status, Converter={StaticResource StatusToBrush}, ConverterParameter=accent}" />
+              </StackPanel>
+
+              <!-- Quality / guard message — large enough to read while posing away from the screen -->
+              <TextBlock Text="{Binding PoseQuality}"
+                         IsVisible="{Binding HasPoseQualityMessage}"
+                         FontSize="22"
+                         FontWeight="SemiBold"
+                         Foreground="{StaticResource TextPrimary}"
+                         TextWrapping="Wrap"
+                         LineHeight="30" />
+
+              <!-- Correction hints — bullets follow the status color, not the brand accent -->
+              <ItemsControl ItemsSource="{Binding Hints}"
+                            IsVisible="{Binding HasHints}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Spacing="8" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                      <Ellipse Width="7" Height="7"
+                               Fill="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Status, Converter={StaticResource StatusToBrush}, ConverterParameter=accent}"
+                               VerticalAlignment="Top" Margin="0,10,0,0" />
+                      <TextBlock Text="{Binding}"
+                                 FontSize="19"
+                                 FontWeight="SemiBold"
+                                 Foreground="{StaticResource TextPrimary}"
+                                 TextWrapping="Wrap"
+                                 LineHeight="26" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
 
             </StackPanel>
           </Border>
         </Grid>
       </Border>
 
-      <!-- RIGHT — Evaluation panel -->
+      <!-- RIGHT — Evaluation panel (similarity meter + reference) -->
       <Border Grid.Column="2"
               Background="{StaticResource SurfacePanel}"
               BorderBrush="{StaticResource AccentMuted}"
               BorderThickness="1,0,0,0">
-        <Grid RowDefinitions="Auto,Auto,*" Margin="20">
+        <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="20">
 
           <!-- Section header -->
           <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,16">
@@ -193,73 +267,39 @@
                        LetterSpacing="0" />
           </StackPanel>
 
-          <!-- Feedback card -->
-          <Border Grid.Row="1"
-                  CornerRadius="12"
-                  Background="{Binding Status, Converter={StaticResource StatusToBrush}}"
-                  BorderBrush="{Binding Status, Converter={StaticResource StatusToBrush}, ConverterParameter=border}"
-                  BorderThickness="1"
-                  Padding="18,16">
-            <StackPanel Spacing="12">
+          <!-- Similarity meter — the key metric, sized to be readable from across the room -->
+          <StackPanel Grid.Row="1" Spacing="6" Margin="0,0,0,20">
+            <TextBlock Text="SEMELHANÇA"
+                       FontSize="11"
+                       FontWeight="Bold"
+                       Foreground="{StaticResource TextMuted}"
+                       LetterSpacing="2" />
+            <TextBlock Text="{Binding SimilarityPercent, StringFormat='{}{0}%'}"
+                       FontSize="64"
+                       FontWeight="Bold"
+                       Foreground="{Binding Status, Converter={StaticResource StatusToBrush}, ConverterParameter=accent}" />
+            <ProgressBar Minimum="0"
+                         Maximum="1"
+                         Value="{Binding Similarity}"
+                         Height="8"
+                         CornerRadius="4"
+                         Background="{StaticResource Divider}"
+                         Foreground="{Binding Status, Converter={StaticResource StatusToBrush}, ConverterParameter=accent}">
+              <ProgressBar.Transitions>
+                <Transitions>
+                  <DoubleTransition Property="Value" Duration="0:0:0.15" Easing="CubicEaseOut" />
+                </Transitions>
+              </ProgressBar.Transitions>
+            </ProgressBar>
+          </StackPanel>
 
-              <!-- Status label row -->
-              <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <Ellipse Width="8" Height="8"
-                         Fill="{Binding Status, Converter={StaticResource StatusToBrush}, ConverterParameter=accent}" />
-                <TextBlock Text="{Binding Status, Converter={StaticResource StatusToLabel}}"
-                           FontSize="11"
-                           FontWeight="Bold"
-                           LetterSpacing="2"
-                           Foreground="{Binding Status, Converter={StaticResource StatusToBrush}, ConverterParameter=accent}" />
-              </StackPanel>
-
-              <Border Height="1" Background="{StaticResource Divider}" />
-
-              <!-- Success or guard message -->
-              <TextBlock Text="{Binding PoseQuality}"
-                         IsVisible="{Binding HasPoseQualityMessage}"
-                         FontSize="16"
-                         FontWeight="SemiBold"
-                         Foreground="{StaticResource TextPrimary}"
-                         TextWrapping="Wrap"
-                         LineHeight="24" />
-
-              <!-- Correction hints -->
-              <ItemsControl ItemsSource="{Binding Hints}"
-                            IsVisible="{Binding HasHints}">
-                <ItemsControl.ItemsPanel>
-                  <ItemsPanelTemplate>
-                    <StackPanel Spacing="8" />
-                  </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <Border Classes="hint">
-                      <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                        <Ellipse Width="7" Height="7" Fill="{StaticResource Accent}" VerticalAlignment="Top" Margin="0,7,0,0" />
-                        <TextBlock Text="{Binding}"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextPrimary}"
-                                   TextWrapping="Wrap"
-                                   LineHeight="20" />
-                      </StackPanel>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-
-            </StackPanel>
-          </Border>
-
-          <!-- Reference pose image — fills remaining space -->
+          <!-- Reference pose image — fills remaining space without cropping -->
           <Border Grid.Row="2"
                   CornerRadius="12"
                   Background="{StaticResource SurfaceCard}"
                   BorderBrush="{StaticResource AccentBorder}"
                   BorderThickness="1"
-                  ClipToBounds="True"
-                  Margin="0,16,0,0">
+                  ClipToBounds="True">
             <Panel Opacity="{Binding ReferenceImageOpacity}">
               <Panel.Transitions>
                 <Transitions>
@@ -267,51 +307,14 @@
                 </Transitions>
               </Panel.Transitions>
 
-              <!-- Image available -->
-              <Grid IsVisible="{Binding HasReferenceImage}">
-                <Image Source="{Binding ReferenceImage}"
-                       Stretch="UniformToFill"
-                       Opacity="0.85"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center" />
-
-                <!-- Top fade -->
-                <Border VerticalAlignment="Top" Height="64">
-                  <Border.Background>
-                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
-                      <GradientStop Offset="0" Color="#DD111111" />
-                      <GradientStop Offset="1" Color="#00111111" />
-                    </LinearGradientBrush>
-                  </Border.Background>
-                </Border>
-
-                <!-- Bottom label overlay -->
-                <Border VerticalAlignment="Bottom" Padding="16,12,16,14">
-                  <Border.Background>
-                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
-                      <GradientStop Offset="0" Color="#00111111" />
-                      <GradientStop Offset="1" Color="#EE111111" />
-                    </LinearGradientBrush>
-                  </Border.Background>
-                  <StackPanel Spacing="4">
-                    <TextBlock Text="REFERÊNCIA"
-                               FontSize="10"
-                               FontWeight="Bold"
-                               Foreground="{StaticResource Accent}"
-                               LetterSpacing="3" />
-                    <TextBlock Text="{Binding SelectedPoseLabel}"
-                               FontSize="14"
-                               FontWeight="Bold"
-                               Foreground="White"
-                               LetterSpacing="1" />
-                  </StackPanel>
-                </Border>
-
-                <Border VerticalAlignment="Bottom"
-                        Height="2"
-                        Background="{StaticResource Accent}"
-                        HorizontalAlignment="Stretch" />
-              </Grid>
+              <!-- Uniform so the reference pose is never cropped — the user needs
+                   to see the entire pose, not a zoomed crop of it. -->
+              <Image IsVisible="{Binding HasReferenceImage}"
+                     Source="{Binding ReferenceImage}"
+                     Stretch="Uniform"
+                     Margin="12"
+                     HorizontalAlignment="Stretch"
+                     VerticalAlignment="Stretch" />
 
               <!-- Placeholder when no reference image -->
               <StackPanel IsVisible="{Binding !HasReferenceImage}"
@@ -336,6 +339,20 @@
 
             </Panel>
           </Border>
+
+          <!-- Reference label — moved below the image so nothing is cropped -->
+          <StackPanel Grid.Row="3" Spacing="4" Margin="0,16,0,0">
+            <TextBlock Text="REFERÊNCIA"
+                       FontSize="10"
+                       FontWeight="Bold"
+                       Foreground="{StaticResource Accent}"
+                       LetterSpacing="3" />
+            <TextBlock Text="{Binding SelectedPoseLabel}"
+                       FontSize="14"
+                       FontWeight="Bold"
+                       Foreground="{StaticResource TextPrimary}"
+                       LetterSpacing="1" />
+          </StackPanel>
 
         </Grid>
       </Border>

@@ -33,8 +33,14 @@ public sealed class FrontLatSpreadEvaluator : IPoseEvaluator
         double torso = Math.Max(ctx.TorsoLength, 1e-6);
         var errors = new List<string>();
 
-        // 1. Elbows spread wider than shoulders.
-        if (AllReliable(le, re) && ctx.ShoulderSpan > 1e-6)
+        // 1. Elbows spread wider than shoulders — the DEFINING lat-spread shape. Not
+        //    skippable: undetected elbows (arms down / out of frame) mean the pose isn't
+        //    being presented, so we flag it instead of passing trivially.
+        if (!AllReliable(le, re))
+        {
+            errors.Add("Leve as mãos à cintura e abra bem os cotovelos para os lados");
+        }
+        else if (ctx.ShoulderSpan > 1e-6)
         {
             double elbowSpan = Distance2D(le, re, ctx.Aspect);
             if (elbowSpan / ctx.ShoulderSpan < _t.ElbowSpreadMinRatio)
@@ -67,14 +73,23 @@ public sealed class FrontLatSpreadEvaluator : IPoseEvaluator
                 errors.Add("Mantenha os cotovelos na mesma altura — um lado está desequilibrado");
         }
 
-        // 5. Wrists near the hip band (fixed: compare to hips, not shoulders).
-        if (AllReliable(lh, rh, lw, rw))
+        // 5. Wrists in the upper-torso band [mid-torso ... hipline].
+        //    Lats start mid-torso, so the hand should rest where the lat begins,
+        //    not at the hip itself. Symmetric tolerance on each side of the band.
+        if (AllReliable(ls, rs, lh, rh, lw, rw))
         {
-            double hipY   = (lh.Y + rh.Y) / 2.0;
-            double wristY = (lw.Y + rw.Y) / 2.0;
-            double deviation = Math.Abs(wristY - hipY) * ctx.Aspect / torso;
-            if (deviation > _t.WristHipRatioTolerance)
-                errors.Add("Traga os punhos para a região da cintura — mãos na altura do quadril");
+            double midShoulderY = (ls.Y + rs.Y) / 2.0;
+            double midHipY      = (lh.Y + rh.Y) / 2.0;
+            double midTorsoY    = (midShoulderY + midHipY) / 2.0;
+            double wristY       = (lw.Y + rw.Y) / 2.0;
+
+            double aboveMidTorso = (midTorsoY - wristY) * ctx.Aspect / torso;
+            double belowHip      = (wristY - midHipY)   * ctx.Aspect / torso;
+
+            if (aboveMidTorso > _t.WristHipRatioTolerance)
+                errors.Add("Mãos muito altas — desça para a região entre a cintura e o meio do tronco");
+            else if (belowHip > _t.WristHipRatioTolerance)
+                errors.Add("Mãos muito baixas — eleve até a altura da cintura");
         }
 
         return PoseFeedback.FromErrors(errors, "Excelente front lat spread! Lats bem expandidos.");

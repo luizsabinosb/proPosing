@@ -12,7 +12,7 @@
     <!-- Text — neutral scale (white with alpha, used consistently) -->
     <SolidColorBrush x:Key="TextPrimary"    Color="#F5FFFFFF" />
     <SolidColorBrush x:Key="TextSecondary"  Color="#AAFFFFFF" />
-    <SolidColorBrush x:Key="TextMuted"      Color="#66FFFFFF" />
+    <SolidColorBrush x:Key="TextMuted"      Color="#8CFFFFFF" /> <!-- ≥4.5:1 on dark surfaces (WCAG AA for small text) -->
     <SolidColorBrush x:Key="TextDisabled"   Color="#33FFFFFF" />
 
     <!-- Accent (proPosing red) -->

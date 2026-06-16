@@ -41,6 +41,8 @@ ml/data/
 *.json
 !package.json
 !package-lock.json
+# Configuração de thresholds das poses — necessária para o app rodar em qualquer máquina
+!interface_avalonia/ProPosing.Avalonia/pose_thresholds.json
 
 # Modelos treinados (gerados pelo sistema)
 ml/models/*.pkl

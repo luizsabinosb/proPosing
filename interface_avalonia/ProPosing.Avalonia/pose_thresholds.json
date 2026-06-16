@@ -1,0 +1,75 @@
+{
+  "double_biceps": {
+    "elbow_min_angle": 50,
+    "elbow_max_angle": 100,
+    "elbow_drop_ratio_max": 0.06,
+    "elbow_asymmetry_ratio": 0.22,
+    "elbow_spread_min_ratio": 0.85
+  },
+  "side_chest": {
+    "arm_min_angle": 55,
+    "arm_max_angle": 125,
+    "elbow_rise_ratio_max": 0.40,
+    "opposite_arm_extended_min": 140,
+    "knee_min_angle": 150,
+    "knee_max_angle": 180,
+    "wrist_above_shoulder_ratio_max": 0.30,
+    "wrist_below_hip_ratio_max": 0.25
+  },
+  "side_triceps": {
+    "arm_min_angle": 150,
+    "arm_max_angle": 180,
+    "elbow_below_shoulder_ratio_min": 0.12,
+    "knee_min_angle": 170,
+    "wrist_hip_ratio_tolerance": 0.20
+  },
+  "most_muscular": {
+    "elbow_below_shoulder_ratio_min": 0.05,
+    "wrist_proximity_ratio": 0.45,
+    "torso_tilt_max_deg": 5.0,
+    "knee_min_angle": 160,
+    "wrist_above_shoulder_ratio_max": 0.12
+  },
+  "enquadramento": {
+    "center_min_x": 0.40,
+    "center_max_x": 0.60,
+    "shoulder_span_min": 0.18,
+    "shoulder_span_max": 0.55,
+    "shoulder_mid_y_min": 0.12,
+    "shoulder_mid_y_max": 0.65
+  },
+  "quarter_turn_side": {
+    "front_elbow_min_angle": 50,
+    "front_elbow_max_angle": 175,
+    "back_arm_min_angle": 95,
+    "knee_min_angle": 140
+  },
+  "front_lat_spread": {
+    "elbow_spread_min_ratio": 1.00,
+    "elbow_min_angle": 50,
+    "elbow_max_angle": 140,
+    "elbow_rise_ratio_max": 0.35,
+    "elbow_asymmetry_ratio": 0.25,
+    "wrist_hip_ratio_tolerance": 0.45
+  },
+  "back_lat_spread": {
+    "elbow_spread_min_ratio": 1.10,
+    "wrist_hip_ratio_tolerance": 0.30,
+    "hip_span_ratio_min": 0.55,
+    "shoulder_asymmetry_ratio": 0.15
+  },
+  "abs_and_thighs": {
+    "wrist_above_shoulder_ratio_max": 0.12,
+    "elbow_spread_min_ratio": 1.20,
+    "knee_asymmetry_ratio_min": 0.18,
+    "torso_tilt_max_deg": 6.0
+  },
+  "teacup": {
+    "torso_twist_min_deg": 12.0,
+    "raised_wrist_above_shoulder_ratio_min": 0.05,
+    "raised_elbow_min_angle": 50,
+    "raised_elbow_max_angle": 140,
+    "low_wrist_hip_ratio_max": 0.45,
+    "knee_min_angle": 140
+  }
+}

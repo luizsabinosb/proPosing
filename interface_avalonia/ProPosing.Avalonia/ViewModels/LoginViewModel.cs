@@ -25,7 +25,12 @@ public partial class LoginViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(LoginCommand))]
     private bool _isLoading;
 
-    public string LoginButtonText => IsLoading ? "AGUARDANDO..." : "ENTRAR";
+    public string LoginButtonText => IsLoading ? "ENTRANDO..." : "ENTRAR";
+
+    // The error describes a past attempt; once the user edits a field it no
+    // longer reflects current state, so clear it.
+    partial void OnEmailChanged(string value) => ErrorMessage = null;
+    partial void OnPasswordChanged(string value) => ErrorMessage = null;
 
     public event Action? LoginSucceeded;
 

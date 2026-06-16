@@ -43,9 +43,12 @@ public sealed class DoubleBicepsEvaluator : IPoseEvaluator
         if (rightOk && VerticalGap(rs, re, ctx.Aspect) / torso > _t.ElbowDropRatioMax)
             errors.Add("Eleve o cotovelo direito até a altura do ombro");
 
-        // 2. Flex angles (3D so profile rotation doesn't collapse the arm).
-        if (leftOk) CheckFlex(errors, "esquerdo", Angle3D(ls, le, lw, ctx.Aspect));
-        if (rightOk) CheckFlex(errors, "direito", Angle3D(rs, re, rw, ctx.Aspect));
+        // 2. Flex angles — 2D (image plane). This is a FRONT pose: the arm moves in the
+        //    frontal plane, so the XY angle is the true bend. Using 3D here let MediaPipe's
+        //    noisy z (elbow pushed forward, shoulder+fist behind it → opposite-sign z on the
+        //    two vectors) inflate a clearly-flexed arm past 100° ("muito aberto" false error).
+        if (leftOk) CheckFlex(errors, "esquerdo", Angle2D(ls, le, lw, ctx.Aspect));
+        if (rightOk) CheckFlex(errors, "direito", Angle2D(rs, re, rw, ctx.Aspect));
 
         // 3. Elbow spread vs shoulder span — ratio, aspect-correct.
         if (leftOk && rightOk && ctx.ShoulderSpan > 1e-6)

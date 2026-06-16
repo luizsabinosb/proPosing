@@ -43,7 +43,12 @@ public sealed record PoseFeedback(
     {
         if (errors.Count == 0)
             return new("correct", correctMessage, []);
-        return new(errors.Count == 1 ? "adjustment_needed" : "incorrect", string.Empty, errors.ToList());
+
+        // 1–2 fixable issues = the pose shape is there, fine-tuning needed (amber).
+        // 3+ issues = the pose isn't being presented yet (red). Guard-clause failures
+        // (wrong orientation, missing defining limbs) bypass this and stay "incorrect".
+        var status = errors.Count <= 2 ? "adjustment_needed" : "incorrect";
+        return new(status, string.Empty, errors.ToList());
     }
 
     public PoseFeedback WithMetrics(PoseMetrics metrics) => this with { Metrics = metrics };

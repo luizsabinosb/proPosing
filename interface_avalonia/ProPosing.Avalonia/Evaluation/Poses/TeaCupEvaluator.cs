@@ -30,7 +30,11 @@ public sealed class TeaCupEvaluator : IPoseEvaluator
         var errors = new List<string>();
 
         // 1. Torso twist — the real quantity. Replaces "one shoulder higher" hack.
-        if (ctx.TorsoTwistDeg < _t.TorsoTwistMinDeg)
+        //    Defining feature: without reliable hips, TorsoTwistDeg is NaN and the
+        //    comparison would silently pass — ask for the hips instead.
+        if (!ctx.HipsReliable)
+            errors.Add("Inclua o quadril no enquadramento — a rotação do tronco define o tea cup");
+        else if (ctx.TorsoTwistDeg < _t.TorsoTwistMinDeg)
             errors.Add("Gire o torso em 3/4 — ombros e quadris devem estar desalinhados");
 
         // 2. Identify the raised arm. Require wrist well above shoulder, not just higher.

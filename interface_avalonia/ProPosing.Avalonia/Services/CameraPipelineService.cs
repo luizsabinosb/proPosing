@@ -61,11 +61,34 @@ public sealed class CameraPipelineService
 
     // ── Main capture loop ──────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Consecutive failed reads before the capture is considered dead and
+    /// reopened (~3 s at the 60 ms retry interval). Covers camera unplug,
+    /// driver hiccups and another app stealing the device.
+    /// </summary>
+    private const int MaxConsecutiveReadFailures = 50;
+
     private async Task CaptureLoopAsync(CancellationToken ct)
+    {
+        // Kiosk resilience: when the capture session dies (camera unplugged,
+        // driver reset), reopen instead of ending the pipeline.
+        while (!ct.IsCancellationRequested)
+        {
+            var reopen = await RunCaptureSessionAsync(ct);
+            if (!reopen) return; // cancelled, or error already fired
+
+            _resolvedCameraIndex = -1; // device may come back on another index
+            Console.Error.WriteLine("[watchdog] Camera stopped delivering frames — reopening...");
+            StatusUpdate?.Invoke("Câmera desconectada. Reconectando...");
+        }
+    }
+
+    /// <summary>Returns true when the camera went silent and should be reopened.</summary>
+    private async Task<bool> RunCaptureSessionAsync(CancellationToken ct)
     {
         // Wait for camera + permission before entering the frame loop.
         using var capture = await OpenCameraWithPermissionWaitAsync(ct);
-        if (capture is null) return; // error already fired
+        if (capture is null) return false; // error already fired
 
         capture.Set(VideoCaptureProperties.FrameWidth,  1280);
         capture.Set(VideoCaptureProperties.FrameHeight, 720);
@@ -76,6 +99,7 @@ public sealed class CameraPipelineService
         var fps = 0;
         var fpsStart = DateTime.UtcNow;
         var tick = 0;
+        var consecutiveReadFailures = 0;
 
         while (!ct.IsCancellationRequested)
         {
@@ -83,12 +107,19 @@ public sealed class CameraPipelineService
 
             if (!capture.Read(frame) || frame.Empty())
             {
+                if (++consecutiveReadFailures >= MaxConsecutiveReadFailures)
+                    return true;
                 await Task.Delay(60, ct);
                 continue;
             }
 
+            consecutiveReadFailures = 0;
             tick++;
             fpsCounter++;
+
+            // Roughly once a second, make sure the inference sidecar is alive.
+            if (tick % 30 == 0)
+                EnsureSidecarAlive(ct);
 
             if ((DateTime.UtcNow - fpsStart).TotalSeconds >= 1)
             {
@@ -126,6 +157,52 @@ public sealed class CameraPipelineService
             var sleepMs   = frameIntervalMs - elapsedMs;
             if (sleepMs > 0) await Task.Delay(sleepMs, ct);
         }
+
+        return false; // cancelled
+    }
+
+    // ── Sidecar watchdog ───────────────────────────────────────────────────────
+
+    private int _sidecarRestartGate; // 0 = idle, 1 = restart in progress
+
+    /// <summary>
+    /// Restarts the sidecar in the background if its process died. Exponential
+    /// backoff between attempts; never throws into the capture loop. The video
+    /// feed keeps running while inference is down — GetLandmarksAsync returns []
+    /// and the UI degrades to "no detection" instead of freezing.
+    /// </summary>
+    private void EnsureSidecarAlive(CancellationToken ct)
+    {
+        if (_sidecar.IsAlive) return;
+        if (Interlocked.CompareExchange(ref _sidecarRestartGate, 1, 0) != 0) return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var delay = TimeSpan.FromSeconds(2);
+                while (!ct.IsCancellationRequested && !_sidecar.IsAlive)
+                {
+                    Console.Error.WriteLine("[watchdog] Sidecar down — restarting...");
+                    try
+                    {
+                        await _sidecar.RestartAsync();
+                        Console.Error.WriteLine("[watchdog] Sidecar restarted.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[watchdog] Sidecar restart failed: {ex.Message}");
+                        await Task.Delay(delay, ct);
+                        delay = TimeSpan.FromSeconds(Math.Min(delay.TotalSeconds * 2, 30));
+                    }
+                }
+            }
+            catch (OperationCanceledException) { /* shutdown */ }
+            finally
+            {
+                Interlocked.Exchange(ref _sidecarRestartGate, 0);
+            }
+        }, CancellationToken.None);
     }
 
     // ── Camera open + permission wait ──────────────────────────────────────────
@@ -155,9 +232,8 @@ public sealed class CameraPipelineService
             // Re-open on every cycle — required after macOS first-time permission grant.
             var cap = OpenCameraRaw();
 
-            if (!cap.IsOpened())
+            if (cap is null)
             {
-                cap.Dispose();
                 Error?.Invoke(
                     "Nenhuma câmera detectada.\n" +
                     "Verifique se a webcam está conectada e tente novamente.");
@@ -182,11 +258,7 @@ public sealed class CameraPipelineService
 
             if (DateTime.UtcNow >= deadline)
             {
-                Error?.Invoke(
-                    "Acesso à câmera negado.\n\n" +
-                    "Para liberar o acesso:\n" +
-                    "Ajustes do Sistema → Privacidade e Segurança → Câmera\n" +
-                    "Ative o acesso para ProPosing (ou Terminal) e reinicie o app.");
+                Error?.Invoke(BuildPermissionDeniedMessage());
                 return null;
             }
 
@@ -196,18 +268,96 @@ public sealed class CameraPipelineService
         return null;
     }
 
-    /// <summary>Opens the camera device without testing for frames.</summary>
-    private VideoCapture OpenCameraRaw()
+    // Cached after the first successful open so re-open cycles (macOS permission
+    // quirk) and app restarts within the session skip the full probe.
+    private int _resolvedCameraIndex = -1;
+    private VideoCaptureAPIs _resolvedBackend = VideoCaptureAPIs.ANY;
+
+    /// <summary>Highest device index probed when the configured one fails.</summary>
+    private const int MaxProbeIndex = 4;
+
+    /// <summary>
+    /// Capture backends in order of reliability for the current OS:
+    ///   macOS   → AVFoundation (the only stable backend for webcams)
+    ///   Windows → DirectShow (most compatible), then Media Foundation
+    ///   Linux   → V4L2
+    /// ANY is always the last fallback.
+    /// </summary>
+    private static VideoCaptureAPIs[] PreferredBackends()
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            return [VideoCaptureAPIs.AVFOUNDATION, VideoCaptureAPIs.ANY];
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return [VideoCaptureAPIs.DSHOW, VideoCaptureAPIs.MSMF, VideoCaptureAPIs.ANY];
+        return [VideoCaptureAPIs.V4L2, VideoCaptureAPIs.ANY];
+    }
+
+    /// <summary>
+    /// Device indices to try: the configured one first, then 0..MaxProbeIndex,
+    /// so the app finds a working webcam even when CAMERA_INDEX is wrong for
+    /// this machine (e.g. index 0 is a virtual camera on Windows).
+    /// </summary>
+    private IEnumerable<int> CandidateIndices()
+    {
+        yield return _config.CameraIndex;
+        for (var i = 0; i <= MaxProbeIndex; i++)
+            if (i != _config.CameraIndex)
+                yield return i;
+    }
+
+    /// <summary>
+    /// Opens the first camera that responds, probing indices and backends.
+    /// Returns null when no device opens at all. Does not test for frames —
+    /// the permission wait loop handles that.
+    /// </summary>
+    private VideoCapture? OpenCameraRaw()
+    {
+        // Fast path: reuse the (index, backend) pair that worked before.
+        if (_resolvedCameraIndex >= 0)
         {
-            // AVFoundation (1200) is the most stable backend for macOS webcams.
-            var avf = new VideoCapture(_config.CameraIndex, (VideoCaptureAPIs)1200);
-            if (avf.IsOpened()) return avf;
-            avf.Dispose();
+            var cached = new VideoCapture(_resolvedCameraIndex, _resolvedBackend);
+            if (cached.IsOpened()) return cached;
+            cached.Dispose();
+            _resolvedCameraIndex = -1; // device unplugged — fall through to probe
         }
 
-        return new VideoCapture(_config.CameraIndex, VideoCaptureAPIs.ANY);
+        foreach (var index in CandidateIndices())
+        {
+            foreach (var backend in PreferredBackends())
+            {
+                var cap = new VideoCapture(index, backend);
+                if (cap.IsOpened())
+                {
+                    Console.Error.WriteLine($"[camera] Opened index={index} backend={backend}");
+                    _resolvedCameraIndex = index;
+                    _resolvedBackend = backend;
+                    return cap;
+                }
+                cap.Dispose();
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Camera-permission instructions for the current OS.</summary>
+    private static string BuildPermissionDeniedMessage()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            return "Acesso à câmera negado.\n\n" +
+                   "Para liberar o acesso:\n" +
+                   "Ajustes do Sistema → Privacidade e Segurança → Câmera\n" +
+                   "Ative o acesso para ProPosing (ou Terminal) e reinicie o app.";
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return "Não foi possível ler imagens da câmera.\n\n" +
+                   "Verifique:\n" +
+                   "Configurações → Privacidade e segurança → Câmera\n" +
+                   "Ative \"Permitir que aplicativos da área de trabalho acessem sua câmera\"\n" +
+                   "e feche outros programas que possam estar usando a webcam.";
+
+        return "Não foi possível ler imagens da câmera.\n" +
+               "Verifique as permissões de câmera do sistema e se outro programa não está usando a webcam.";
     }
 
     // ── Inference ──────────────────────────────────────────────────────────────

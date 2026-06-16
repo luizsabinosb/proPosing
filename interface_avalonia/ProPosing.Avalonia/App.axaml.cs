@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using ProPosing.Avalonia.Evaluation;
@@ -48,21 +49,35 @@ public partial class App : Application
                     Console.Error.WriteLine($"[sidecar] Failed to start: {t.Exception?.InnerException?.Message}");
             });
 
-            // ── Login ────────────────────────────────────────────────────
-            var loginVm     = new LoginViewModel();
-            var loginWindow = new LoginWindow { DataContext = loginVm };
-
-            desktop.MainWindow = loginWindow;
-
-            loginVm.LoginSucceeded += () =>
+            if (appConfig.KioskMode)
             {
-                var mainWindow = new MainWindow { DataContext = mainVm };
+                // ── Kiosk (sala de poses, sem operador) ──────────────────
+                // Sem login: a máquina precisa voltar sozinha após reboot.
+                // Esc sai do fullscreen / F11 retorna (atalho da equipe).
+                desktop.MainWindow = new MainWindow
+                {
+                    DataContext = mainVm,
+                    WindowState = WindowState.FullScreen,
+                };
+            }
+            else
+            {
+                // ── Login ────────────────────────────────────────────────
+                var loginVm     = new LoginViewModel();
+                var loginWindow = new LoginWindow { DataContext = loginVm };
 
-                // Set new MainWindow before closing login to prevent app shutdown
-                desktop.MainWindow = mainWindow;
-                mainWindow.Show();
-                loginWindow.Close();
-            };
+                desktop.MainWindow = loginWindow;
+
+                loginVm.LoginSucceeded += () =>
+                {
+                    var mainWindow = new MainWindow { DataContext = mainVm };
+
+                    // Set new MainWindow before closing login to prevent app shutdown
+                    desktop.MainWindow = mainWindow;
+                    mainWindow.Show();
+                    loginWindow.Close();
+                };
+            }
 
             desktop.ShutdownRequested += (_, _) => sidecar.Dispose();
         }

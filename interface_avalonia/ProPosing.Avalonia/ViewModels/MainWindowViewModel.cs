@@ -66,6 +66,23 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private IReadOnlyList<string> _hints = [];
 
+    [ObservableProperty]
+    private double _similarity;
+
+    public int SimilarityPercent => (int)Math.Round(Similarity * 100);
+
+    partial void OnSimilarityChanged(double value)
+        => OnPropertyChanged(nameof(SimilarityPercent));
+
+    private static double ComputeSimilarity(Models.PoseFeedback? fb) => fb?.Status switch
+    {
+        "correct"           => 1.0,
+        // Amber = pose shape present, 1–2 fixes left: high but not perfect.
+        "adjustment_needed" => Math.Max(0.60, 0.90 - 0.10 * fb.Hints.Count),
+        "incorrect"         => fb.Hints.Count == 0 ? 0.20 : Math.Max(0.25, 1.0 - 0.15 * fb.Hints.Count),
+        _                   => 0.0,
+    };
+
     public MainWindowViewModel(AppConfig config, CameraPipelineService cameraPipelineService)
     {
         _config = config;
@@ -74,15 +91,14 @@ public partial class MainWindowViewModel : ObservableObject
         Poses = new ObservableCollection<PoseOption>
         {
             new() { Number = 0, Mode = "enquadramento",    Label = "ENQUADRAMENTO"   },
-            new() { Number = 1, Mode = "double_biceps",    Label = "DUPLO BÍCEPS"    },
+            new() { Number = 1, Mode = "double_biceps",    Label = "DOUBLE BICEPS"    },
             new() { Number = 2, Mode = "side_chest",       Label = "SIDE CHEST"      },
-            new() { Number = 3, Mode = "side_triceps",     Label = "SIDE TRÍCEPS"    },
+            new() { Number = 3, Mode = "side_triceps",     Label = "SIDE TRICEPS"    },
             new() { Number = 4, Mode = "most_muscular",    Label = "MOST MUSCULAR"   },
             new() { Number = 5, Mode = "quarter_turn_side",Label = "QUARTER TURN"    },
             new() { Number = 6, Mode = "front_lat_spread", Label = "FRONT LAT SPREAD"},
-            new() { Number = 7, Mode = "back_lat_spread",  Label = "BACK LAT SPREAD" },
-            new() { Number = 8, Mode = "abs_and_thighs",   Label = "ABS AND THIGHS"  },
-            new() { Number = 9, Mode = "teacup",           Label = "TEA CUP"         },
+            new() { Number = 7, Mode = "abs_and_thighs",   Label = "ABS AND THIGHS"  },
+            new() { Number = 8, Mode = "teacup",           Label = "TEA CUP"         },
         };
 
         _cameraPipelineService.FrameReady      += OnFrameReady;
@@ -113,6 +129,7 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (IsRunning) return;
 
+        CancelAutoRetry();
         CameraError = string.Empty;
         _cameraPipelineService.SetPoseMode(SelectedPoseMode);
         await _cameraPipelineService.StartAsync();
@@ -122,8 +139,44 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private async Task StopCameraAsync()
     {
+        CancelAutoRetry();
         await _cameraPipelineService.StopAsync();
         IsRunning = false;
+    }
+
+    // ── Kiosk auto-retry ────────────────────────────────────────────────────
+    // The app runs unattended in a posing room: nobody will click "Tentar
+    // novamente". After a pipeline error, retry on a timer until it works
+    // (e.g. the camera gets plugged back in). The manual button stays usable.
+
+    private static readonly TimeSpan AutoRetryInterval = TimeSpan.FromSeconds(15);
+    private CancellationTokenSource? _autoRetryCts;
+
+    private void CancelAutoRetry()
+    {
+        _autoRetryCts?.Cancel();
+        _autoRetryCts = null;
+    }
+
+    private void ScheduleAutoRetry()
+    {
+        CancelAutoRetry();
+        _autoRetryCts = new CancellationTokenSource();
+        var ct = _autoRetryCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(AutoRetryInterval, ct);
+                await Dispatcher.UIThread.InvokeAsync(async () =>
+                {
+                    if (!ct.IsCancellationRequested && !IsRunning)
+                        await StartCameraAsync();
+                });
+            }
+            catch (OperationCanceledException) { /* user acted first */ }
+        });
     }
 
     [RelayCommand]
@@ -167,6 +220,11 @@ public partial class MainWindowViewModel : ObservableObject
             CameraStatusMessage = string.Empty;
             CameraError = message;
             IsRunning   = false;
+            // Clear the stale frame so the placeholder (and the error inside it)
+            // becomes visible — mid-session failures would otherwise hide the
+            // error behind the last frozen frame.
+            CameraFrame = null;
+            ScheduleAutoRetry();
         });
     }
 
@@ -211,6 +269,7 @@ public partial class MainWindowViewModel : ObservableObject
                 Status      = fb?.Status   ?? "no_detection";
                 PoseQuality = fb?.Message  ?? "Aguardando detecção...";
                 Hints       = fb?.Hints    ?? [];
+                Similarity  = ComputeSimilarity(fb);
                 OnPropertyChanged(nameof(HasHints));
                 OnPropertyChanged(nameof(HasPoseQualityMessage));
             }
